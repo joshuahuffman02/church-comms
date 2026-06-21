@@ -1,0 +1,31 @@
+# deploy/backup.cron — sample crontab lines for the Church Communications app.
+#
+# Install with `crontab -e` (per-user) and paste the lines you want, OR drop
+# this file at /etc/cron.d/church-comms on Linux (system crontabs need a user
+# field — uncomment the variant noted below).
+#
+# IMPORTANT: edit /srv/church-comms to the ABSOLUTE path of your repo. If your
+# path contains a space (e.g. ".../Church Communications"), keep it quoted as
+# shown. cron has a minimal PATH, so we cd into the repo and call bash directly.
+
+# Pin the timezone so the schedule (and the app's date math) match the church.
+TZ=America/Chicago
+# Give cron a sane PATH (Homebrew sqlite3/rclone on macOS live in these dirs).
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+
+# ── Nightly database backup at 2:00 AM ──────────────────────────────────────
+# Runs the online-safe backup, prunes old copies, and (if BACKUP_REMOTE is set
+# and rclone is configured) copies the snapshot off the box to Google Drive.
+# Set BACKUP_REMOTE here to enable off-box copies, e.g.:
+#   BACKUP_REMOTE=gdrive:church-comms-backups
+0 2 * * * cd "/srv/church-comms" && bash scripts/backup-db.sh >> backups/backup.log 2>&1
+
+# System-crontab variant (/etc/cron.d/church-comms) — note the extra user field:
+# 0 2 * * * comms cd "/srv/church-comms" && bash scripts/backup-db.sh >> backups/backup.log 2>&1
+
+# ── Planning Center sync every 30 minutes (only if CRON_SECRET is set) ───────
+# Pulls APPROVED PCO Calendar events down as Submitted requests. The endpoint
+# rejects requests without the secret, so this line is a no-op until you set
+# CRON_SECRET in .env AND substitute it below (or export it for cron).
+# Replace REPLACE_WITH_CRON_SECRET with the value of CRON_SECRET from .env.
+# */30 * * * * curl -fsS -H "Authorization: Bearer REPLACE_WITH_CRON_SECRET" http://localhost:3000/api/cron/sync-events >> /srv/church-comms/backups/pco-sync.log 2>&1

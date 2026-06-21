@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: file:./dev.db
+      AUTH_SECRET: ci-auth-secret-not-for-production
+      NEXT_TELEMETRY_DISABLED: "1"
+      TZ: UTC
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Prepare fresh database
+        run: npm run db:prepare
+
+      - name: Seed demo database
+        run: ADMIN_PASSWORD=ci-demo-password npx tsx prisma/seed.ts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build

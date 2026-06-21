@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  password      String?
+  roles         Json // string[]: ["admin","triager","designer","publisher","approver","requester"]
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  requested     Request[]      @relation("requester")
+  owned         Request[]      @relation("owner")
+  ownedDeliverables Deliverable[] @relation("deliverableOwner")
+  approvalRules ApprovalRule[]
+  approvals     Approval[]
+  activityLogs  ActivityLog[]
+}
+
+/// Durable, staff-visible history for trust-critical changes. Records who did
+/// what, when, and which entity it affected. `actorEmail`/`actorName` are
+/// denormalized snapshots so an offboarded/deleted user still leaves readable
+/// history after `actorId` is SetNull.
+model ActivityLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String
+  entityId   String?
+  summary    String?
+  metadata   Json?
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorEmail String?
+  actorName  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+model Ministry {
+  id        String            @id @default(cuid())
+  name      String
+  color     String            @default("#c7b9ff")
+  active    Boolean           @default(true)
+  sortOrder Int               @default(0)
+  // Legacy single-ministry back-relation (Request.ministryId — the denormalized
+  // "primary" pointer kept in sync with the first of `events`).
+  requests  Request[]
+  // Source-of-truth many-to-many: every event this ministry is involved in,
+  // all equal. Implicit join table `_MinistryToRequest`.
+  events    Request[]         @relation("MinistryEvents")
+  series    RecurringSeries[]
+  // Tag rules that auto-attach this ministry on import (FK is SetNull, so a
+  // deleted ministry leaves its rules intact but unministried).
+  tagRules  EventTagRule[]
+}
+
+/// One admin-editable rule mapping a single Planning Center tag string to app
+/// meaning, so a well-tagged event lands already classified on import. See
+/// `src/lib/tag-rules.ts` (pure `classifyByTags`), `src/actions/pco.ts` (applied
+/// on CREATE only — never on update, to preserve triage edits), and
+/// `src/actions/tag-rules.ts` + `src/app/settings/tag-rules` (admin CRUD).
+///
+///   ministryId         — ministry to attach when matched (null = tier/control-only).
+///   tierSuggestion     — advisory audience tier 1|2|3 (broadest wins across tags).
+///   noPromo            — "Room Only": matched → keep the event out of the comms queue.
+///   missionTrip        — legacy "Mission Trip" flag, kept for back-compat; the
+///                        playbook hint is now driven by `suggestedTemplateId`.
+///   suggestedTemplateId — an Event Playbook this tag suggests applying. Generic
+///                        replacement for the mission-trip-specific flag: any tag
+///                        can point at any playbook (e.g. "Sermon Series" → the
+///                        Sermon Series checklist). Surfaced as a hint on the
+///                        event; never auto-applied. FK SetNull so deleting a
+///                        playbook leaves the rule intact, just without a suggestion.
+/// `tag` is unique (one rule per PCO tag string); matching is case-insensitive.
+model EventTagRule {
+  id                  String         @id @default(cuid())
+  tag                 String         @unique
+  ministryId          String?
+  ministry            Ministry?      @relation(fields: [ministryId], references: [id], onDelete: SetNull)
+  tierSuggestion      Int? // 1 | 2 | 3 (broadest=1) — advisory
+  noPromo             Boolean        @default(false)
+  missionTrip         Boolean        @default(false)
+  suggestedTemplateId String?
+  suggestedTemplate   EventTemplate? @relation(fields: [suggestedTemplateId], references: [id], onDelete: SetNull)
+  sortOrder           Int            @default(0)
+  createdAt           DateTime       @default(now())
+
+  @@index([ministryId])
+  @@index([suggestedTemplateId])
+}
+
+model Channel {
+  id                       String        @id @default(cuid())
+  key                      String        @unique
+  name                     String
+  type                     String // "windowed" | "dated_instance" | "one_shot"
+  defaultPublishOffsetDays Int
+  productionLeadDays       Int           @default(7)
+  lockLeadDays             Int? // dated_instance content lock
+  cadence                  Json? // windowed: { "weekdays":[0], "extraWeekdays":[3] }
+  capacity                 Int? // top-3 = 3, loop = 10
+  frequencyCap             Int?
+  contentSpec              Json?
+  tierEligibility          Json // number[]: [1,2,3]
+  color                    String        @default("#93c5fd")
+  autoApprove              Boolean       @default(false)
+  active                   Boolean       @default(true)
+  sortOrder                Int           @default(0)
+  // Free-text production reference for this channel's deliverable (e.g. "Banner
+  // is 3'x8' vinyl; submit art 3 weeks ahead; past lesson: order 2 in case of
+  // weather"). Surfaced on the Outputs/[key] page header. Edited in
+  // Settings → Channels.
+  productionNotes          String?
+  deliverables             Deliverable[]
+  touches                  Touch[]
+}
+
+model Request {
+  id                   String           @id @default(cuid())
+  pcoEventId           String?          @unique
+  pcoApprovalStatus    String?
+  pcoChurchCenterUrl   String?
+  // Read-only PCO enrichment (Model A pull): publish signals from the event,
+  // the event's tag labels (category/ministry/campus), the staff owner's
+  // contact, and the overall room-request approval status. All refreshed each
+  // sync; never written back to PCO. See `src/lib/pco.ts` + `src/actions/pco.ts`.
+  pcoVisibleInChurchCenter Boolean?
+  pcoFeatured              Boolean?
+  pcoTags                  Json? // string[]: tag names (category/ministry/campus labels)
+  pcoOwnerName             String?
+  pcoOwnerEmail            String?
+  pcoRoomStatus            String? // "approved" | "pending" | "rejected" (room resource-requests overall), or null
+  // Local iCal-import identity. This is intentionally separate from PCO:
+  // selected rows from a temporary ICS file can be made live in the app without
+  // pretending they are Planning Center-backed. The key is uid + occurrence day.
+  externalCalendarSource   String?
+  externalCalendarKey      String?          @unique
+  title                String
+  description          String?
+  ministryId           String?
+  ministry             Ministry?        @relation(fields: [ministryId], references: [id])
+  // All ministries this event belongs to (all equal) — the source of truth.
+  // `ministryId` above is a denormalized "primary" pointer kept = ministries[0].
+  ministries           Ministry[]       @relation("MinistryEvents")
+  // Tag-driven auto-classification (see `src/lib/tag-rules.ts`). On a fresh PCO
+  // import, the event's PCO tags are matched against `EventTagRule`s:
+  //   suggestedTier — the advisory tier the tags imply (broadest wins); the
+  //     comms team still confirms the real `tier` at triage.
+  //   noPromo       — set by a "Room Only" style tag: keep this out of the comms
+  //     queue / don't promote it.
+  suggestedTier        Int?
+  noPromo              Boolean          @default(false)
+  requesterName        String?
+  requesterEmail       String?
+  statusToken          String?          @unique
+  requesterId          String?
+  requester            User?            @relation("requester", fields: [requesterId], references: [id])
+  seriesId             String?
+  series               RecurringSeries? @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  whoIsItFor           String           @default("whole_church")
+  audienceReachPct     Int?
+  tier                 Int              @default(2)
+  eventStart           DateTime
+  eventEnd             DateTime?
+  location             String?
+  needsRegistration    Boolean          @default(false)
+  registrationUrl      String?
+  cost                 String?
+  capacity             Int?
+  registrationClosesAt DateTime?
+  roomBooked           String?
+  nextStepText         String?
+  nextStepUrl          String?
+  successMetric        String?
+  notes                String?
+  sensitiveFlag        Boolean          @default(false)
+  status               String           @default("submitted")
+  ownerId              String?
+  owner                User?            @relation("owner", fields: [ownerId], references: [id])
+  overrideReason       String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  assets               Asset[]
+  deliverables         Deliverable[]
+  approvals            Approval[]
+  updates              EventUpdate[]
+  tasks                EventTask[]
+  videoTop3            VideoTop3Item[]
+
+  @@index([seriesId])
+}
+
+/// An ignored occurrence from a local/external iCal import preview. This is the
+/// "delete from preview" state: it does not delete anything in Planning Center
+/// or the source calendar, it just hides that occurrence from this import queue.
+model ExternalCalendarIgnore {
+  id        String   @id @default(cuid())
+  source    String
+  key       String
+  uid       String
+  dateKey   String
+  title     String
+  location  String?
+  createdAt DateTime @default(now())
+
+  @@unique([source, key])
+  @@index([source, dateKey])
+}
+
+/// A dated phase in an event's "Message Arc" — the comms team plans a timeline
+/// of message moments for an event (Save-the-date → Registration open → Last
+/// call → Day-of, etc.), each taking effect on `scheduledFor` and optionally
+/// carrying its own copy, both a general `body` and per-channel overrides in
+/// `channelCopy`. Phases can be planned up front (see `suggestStarterArc` in
+/// `src/lib/updates.ts`) or added on the fly. See `src/lib/updates.ts` for the
+/// pure logic (sorting, the active phase as-of a date, the starter arc).
+model EventUpdate {
+  id           String   @id @default(cuid())
+  requestId    String
+  request      Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  scheduledFor DateTime // church-local midnight: when this phase takes effect / is actioned
+  title        String // the phase name ("Save the date", "Registration open", custom…)
+  kind         String? // save_the_date | register | reminder | last_call | day_of | follow_up | logistics | adhoc
+  body         String? // the general copy/message for this phase
+  // Optional per-channel copy: { [channelKey]: { content?: string; assetLink?: string } }.
+  // Lets one phase carry different wording / graphic per output.
+  channelCopy  Json?
+  status       String   @default("planned") // planned | done
+  sortOrder    Int      @default(0) // tiebreaker for same-day ordering
+  createdAt    DateTime @default(now())
+
+  @@index([requestId, scheduledFor])
+}
+
+/// An "Event Playbook": a reusable, dated admin CHECKLIST template (e.g.
+/// "Mission Trip") of tasks that should happen on a relative runway before an
+/// event. Applied to a Request to materialize concrete, dated `EventTask`s so
+/// staff get the right tasks at the right time when planning far ahead. See
+/// `src/lib/playbooks.ts` for the pure date logic and `src/actions/templates.ts`
+/// for the admin CRUD.
+model EventTemplate {
+  id          String              @id @default(cuid())
+  name        String
+  description String?
+  active      Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  tasks       EventTemplateTask[]
+  // Tag rules that suggest applying this playbook when their tag matches an
+  // event (see EventTagRule.suggestedTemplateId). FK is SetNull, so deleting a
+  // playbook simply clears the suggestion on its rules rather than blocking.
+  suggestedBy EventTagRule[]
+}
+
+/// One checklist item within an `EventTemplate`. `offsetDays` is how many days
+/// BEFORE the event the task is due (null = no date — a standing reminder).
+/// `notes` carries tips / dimensions / lessons learned. Copied into a concrete
+/// `EventTask` (with a computed `dueAt`) when the playbook is applied to an event.
+model EventTemplateTask {
+  id         String        @id @default(cuid())
+  templateId String
+  template   EventTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title      String
+  notes      String?
+  offsetDays Int? // days before the event; null = no date
+  category   String?
+  sortOrder  Int           @default(0)
+
+  @@index([templateId])
+}
+
+/// A concrete admin task attached to a specific event (Request). Materialized
+/// from an `EventTemplateTask` when a playbook is applied (`dueAt` = eventStart
+/// − offsetDays), or added manually. `source` is the originating playbook name
+/// or "manual". See `src/lib/playbooks.ts` + `src/components/event-tasks.tsx`.
+model EventTask {
+  id        String   @id @default(cuid())
+  requestId String
+  request   Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  title     String
+  notes     String?
+  dueAt     DateTime? // church-local midnight: eventStart − offsetDays, or manual
+  status    String   @default("todo") // todo | done
+  source    String? // template name or "manual"
+  category  String?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+}
+
+/// A standing item (e.g. "Missionary of the Month", "Tuesday Talks") defined
+/// ONCE as a template + cadence. Its individual occurrences are normal Request
+/// rows linked back via `seriesId`, so they flow through the existing
+/// scheduling / boards / outputs unchanged. See `src/lib/recurrence.ts`.
+model RecurringSeries {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  ministryId   String?
+  ministry     Ministry? @relation(fields: [ministryId], references: [id])
+  tier         Int       @default(2)
+  whoIsItFor   String    @default("whole_church")
+  nextStepText String?
+  location     String?
+  frequency    String // "weekly" | "monthly"
+  interval     Int       @default(1)
+  weekday      Int? // 0=Sun..6=Sat, for weekly (null = startDate's weekday)
+  dayOfMonth   Int? // 1-31, for monthly (null = startDate's day; clamped to month length)
+  startDate    DateTime
+  untilDate    DateTime?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  occurrences  Request[]
+}
+
+/// A standing weekly chore that is NOT tied to any event (e.g. "check the
+/// ministry pages for outdated info", "double-check the next 3 weeks are on the
+/// app/web calendar"). Defined once; surfaced on the This Week board every week
+/// and checked off per-week via `StandingTaskCompletion` (so it resets each
+/// week). The manual ad schedule's recurring WEB-maintenance reminders are
+/// exactly this. See `src/actions/standing-tasks.ts`.
+model StandingTask {
+  id          String                   @id @default(cuid())
+  title       String
+  notes       String?
+  area        String? // a label/area, e.g. "WEB", "App/Web Calendar"
+  active      Boolean                  @default(true)
+  sortOrder   Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+  completions StandingTaskCompletion[]
+}
+
+/// One week's completion of a `StandingTask`. `weekStart` is the Monday midnight
+/// of the week it was checked off, so the chore resets every week.
+model StandingTaskCompletion {
+  id        String       @id @default(cuid())
+  taskId    String
+  task      StandingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  weekStart DateTime
+  createdAt DateTime     @default(now())
+
+  @@unique([taskId, weekStart])
+}
+
+/// One curated slot in a given Sunday's announcement-video "Top 3". Either points
+/// at an upcoming event (`requestId`) or carries a free-text awareness item
+/// (`label`) — mirroring how the manual ad schedule's TOP 3 mixes upcoming events
+/// (shown ahead of their date) with non-event awareness items. Up to 3 per Sunday.
+/// See `src/actions/video-top3.ts`.
+model VideoTop3Item {
+  id        String   @id @default(cuid())
+  sunday    DateTime // the Sunday the video airs (church-local midnight)
+  sortOrder Int      @default(0) // 0..2
+  requestId String?
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  label     String?
+  createdAt DateTime @default(now())
+
+  @@index([sunday])
+}
+
+model Asset {
+  id        String  @id @default(cuid())
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  kind      String // "upload" | "link"
+  url       String
+  filename  String?
+  isFinal   Boolean @default(false)
+}
+
+model Deliverable {
+  id              String    @id @default(cuid())
+  requestId       String
+  request         Request   @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  channelId       String
+  channel         Channel   @relation(fields: [channelId], references: [id])
+  instanceDate    DateTime?
+  windowStart     DateTime?
+  windowEnd       DateTime?
+  productionDueAt DateTime?
+  phase           String?
+  status          String    @default("to_design") // to_design|in_progress|proof|ready|scheduled|published|skipped
+  skippedReason   String?
+  assetLink       String?
+  notes           String?
+  ownerId         String?
+  owner           User?     @relation("deliverableOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  touches         Touch[]
+
+  @@index([ownerId])
+}
+
+model Touch {
+  id            String      @id @default(cuid())
+  deliverableId String
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  channelId     String
+  channel       Channel     @relation(fields: [channelId], references: [id])
+  scheduledAt   DateTime
+  purposeLabel  String?
+  status        String      @default("scheduled") // scheduled|published|skipped
+  // Per-week editable content: lets the SAME deliverable carry different copy /
+  // graphic / note on each weekly appearance (e.g. the Jun 7 loop slide differs
+  // from Jun 14). Empty/null falls back to the event-level defaults in exports.
+  content       String?
+  assetLink     String?
+  note          String?
+}
+
+model Setting {
+  id                        Int    @id @default(1)
+  reachThresholdPct         Int    @default(50)
+  promoRatioCap             Float  @default(0.2)
+  stageCap                  Int    @default(3)
+  loopCap                   Int    @default(10)
+  defaultProductionLeadDays Int    @default(7)
+  reviewCadence             Json   @default("[1,4]")
+  sprintQuota               Int    @default(4)
+  timezone                  String @default("America/Chicago")
+  palette                   Json?
+  videoScriptIntro          String?
+  videoScriptOutro          String?
+}
+
+model Campaign {
+  id                 String   @id @default(cuid())
+  name               String
+  startsAt           DateTime
+  endsAt             DateTime
+  suspendsGuardrails Boolean  @default(true)
+  createdAt          DateTime @default(now())
+}
+
+model ApprovalRule {
+  id             String     @id @default(cuid())
+  name           String
+  conditionType  String // "tier1" | "channel" | "stage" | "all_church_email" | "sensitive"
+  conditionValue String? // e.g. a channel key when conditionType="channel"
+  approverId     String?
+  approver       User?      @relation(fields: [approverId], references: [id])
+  active         Boolean    @default(true)
+  approvals      Approval[]
+}
+
+model Approval {
+  id         String        @id @default(cuid())
+  requestId  String
+  request    Request       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  ruleId     String?
+  rule       ApprovalRule? @relation(fields: [ruleId], references: [id])
+  status     String        @default("pending") // pending | approved | rejected
+  approverId String?
+  approver   User?         @relation(fields: [approverId], references: [id])
+  note       String?
+  decidedAt  DateTime?
+  createdAt  DateTime      @default(now())
+}
+
+/// A Planning Center Calendar "Resource" — a bookable room or piece of
+/// equipment. READ-ONLY mirror: we pull these from PCO (never write back) so the
+/// Rooms section can list spaces and show what's booked in each. `kind` is
+/// "Room" or "Resource"; the Rooms UI filters to "Room". A resource that
+/// disappears from PCO is marked `active = false` rather than deleted, so its
+/// historical bookings survive. See `src/lib/pco-rooms.ts`.
+model PcoResource {
+  id            String               @id @default(cuid())
+  pcoResourceId String               @unique
+  name          String
+  kind          String // "Room" | "Resource"
+  description   String?
+  homeLocation  String?
+  quantity      Int?
+  imageUrl      String?
+  updatedAt     DateTime?
+  active        Boolean              @default(true)
+  syncedAt      DateTime             @default(now())
+  bookings      PcoResourceBooking[]
+}
+
+/// One future booking of a `PcoResource` (a room/resource reserved for an event
+/// occurrence), mirrored read-only from PCO Calendar's resource_bookings. We
+/// keep only future bookings and prune stale ones each sync. `eventInstanceId`
+/// matches our `Request.pcoEventId` when the event has been imported, letting
+/// the Rooms UI cross-link a booking to its request. See `src/lib/pco-rooms.ts`.
+model PcoResourceBooking {
+  id              String      @id @default(cuid())
+  pcoBookingId    String      @unique
+  resourceId      String
+  resource        PcoResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  startsAt        DateTime
+  endsAt          DateTime?
+  eventInstanceId String?
+  eventTitle      String?
+  churchCenterUrl String?
+  approvalStatus  String?
+  syncedAt        DateTime    @default(now())
+
+  @@index([resourceId, startsAt])
+}

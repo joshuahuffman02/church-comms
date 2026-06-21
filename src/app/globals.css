@@ -1,0 +1,339 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---- Soft sky / cloud palette --------------------------------------- */
+  --color-sky-bg: #eef3fc;        /* page wash / hover tint */
+  --color-cloud: #ffffff;         /* card base */
+  --color-lavender: #c7b9ff;
+  --color-skyblue: #93c5fd;
+  --color-mint: #a7f3d0;
+  --color-peach: #fed7aa;
+  --color-ink: #253449;           /* soft slate, not pure black (good contrast) */
+  --color-muted: #64748b;         /* secondary text with readable contrast */
+
+  --radius: 1.5rem;               /* ~24px — large, pillowy card radius */
+
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui;
+
+  /* Multi-layer "floating" shadow so cards lift off the sky */
+  --shadow-float:
+    0 1px 1px rgba(99, 102, 241, 0.04),
+    0 8px 20px -10px rgba(99, 102, 241, 0.20),
+    0 24px 48px -24px rgba(56, 189, 248, 0.22);
+  --shadow-float-lifted:
+    0 2px 2px rgba(99, 102, 241, 0.05),
+    0 14px 28px -12px rgba(99, 102, 241, 0.26),
+    0 36px 64px -28px rgba(56, 189, 248, 0.30);
+
+  /* Soft gradient for the primary control */
+  --gradient-primary: linear-gradient(135deg, #93c5fd 0%, #a78bfa 55%, #c4b5fd 100%);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Page background: a calm sky → lavender → mint wash, with two big, very   */
+/* soft "cloud" blobs that drift slowly behind everything.                 */
+/* ----------------------------------------------------------------------- */
+body {
+  background:
+    radial-gradient(1100px 680px at 8% -8%, #e7eeff 0%, transparent 58%),
+    radial-gradient(1000px 600px at 108% 4%, #e6fbff 0%, transparent 55%),
+    radial-gradient(900px 700px at 88% 108%, #f1ecff 0%, transparent 60%),
+    linear-gradient(180deg, #f3f7ff 0%, #eef3fc 45%, #f4fbf7 100%);
+  background-attachment: fixed;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  position: relative;
+}
+
+/* Drifting cloud blobs — purely decorative, behind all content. */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  border-radius: 9999px;
+  filter: blur(70px);
+  opacity: 0.55;
+  pointer-events: none;
+  will-change: transform;
+}
+body::before {
+  top: -8rem;
+  left: -6rem;
+  width: 38rem;
+  height: 38rem;
+  background: radial-gradient(circle at 30% 30%, rgba(147, 197, 253, 0.55), transparent 70%);
+  animation: drift-a 26s ease-in-out infinite;
+}
+body::after {
+  bottom: -10rem;
+  right: -8rem;
+  width: 42rem;
+  height: 42rem;
+  background: radial-gradient(circle at 65% 40%, rgba(196, 181, 253, 0.45), transparent 70%);
+  animation: drift-b 32s ease-in-out infinite;
+}
+
+@keyframes drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(3rem, 2.5rem, 0) scale(1.08); }
+}
+@keyframes drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(-3.5rem, -2rem, 0) scale(1.06); }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Floating cards: warm near-white, translucent, hairline border, blur.    */
+/* ----------------------------------------------------------------------- */
+.card-float {
+  background: rgba(255, 255, 255, 0.72);
+  -webkit-backdrop-filter: saturate(140%) blur(14px);
+  backdrop-filter: saturate(140%) blur(14px);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-float);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  outline: 1px solid rgba(148, 163, 184, 0.08);
+  outline-offset: -1px;
+  transition:
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Interactive cards (links/buttons that are themselves a .card-float, or a
+   .card-float inside a link) get a gentle hover lift. */
+a.card-float:hover,
+button.card-float:hover,
+a:hover > .card-float,
+.card-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-float-lifted);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Controls: pill inputs/selects/buttons with a gentle focus ring.         */
+/* ----------------------------------------------------------------------- */
+input,
+select,
+textarea {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--color-ink);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-muted);
+}
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: rgba(129, 140, 248, 0.45);
+}
+
+/* Visible, soft-but-clear focus ring for ALL interactive elements
+   (keyboard accessibility, not relying on color alone). */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.9),
+    0 0 0 5px rgba(129, 140, 248, 0.55);
+  border-radius: 9999px;
+}
+/* Cards / panels keep their own radius when focused. */
+.card-float:focus-visible,
+a.card-float:focus-visible {
+  border-radius: var(--radius);
+}
+
+/* Soft gradient primary button: any button using `bg-ink` becomes the
+   pillowy gradient pill, so existing markup inherits the new look. */
+button.bg-ink,
+.btn-primary {
+  background-image: var(--gradient-primary);
+  background-color: transparent;
+  color: #ffffff;
+  border: none;
+  box-shadow:
+    0 6px 16px -6px rgba(129, 140, 248, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform 0.18s ease, box-shadow 0.25s ease, filter 0.2s ease;
+}
+button.bg-ink:not(:disabled):hover,
+.btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  filter: saturate(115%);
+  box-shadow:
+    0 10px 22px -6px rgba(129, 140, 248, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+button.bg-ink:not(:disabled):active,
+.btn-primary:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Sidebar nav: floating glassy panel with soft active-pill highlight.     */
+/* ----------------------------------------------------------------------- */
+.nav-link {
+  position: relative;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+.nav-link:hover {
+  background: rgba(147, 197, 253, 0.14);
+}
+.nav-link:active {
+  transform: scale(0.985);
+}
+.nav-active {
+  background: linear-gradient(135deg, rgba(147, 197, 253, 0.28), rgba(167, 139, 250, 0.24));
+  color: var(--color-ink);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+/* Little accent dot on the active link. */
+.nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0.4rem;
+  top: 50%;
+  width: 4px;
+  height: 1.1rem;
+  transform: translateY(-50%);
+  border-radius: 9999px;
+  background: linear-gradient(180deg, #93c5fd, #a78bfa);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Typography: friendly, airy headings.                                    */
+/* ----------------------------------------------------------------------- */
+h1 {
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+h2 {
+  letter-spacing: 0;
+}
+
+/* Gentle entrance for page content — calm fade + rise. Honors reduced
+   motion. Applied via the main content wrapper. */
+@keyframes float-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.float-in {
+  animation: float-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Reusable hairline divider tint that matches the soft palette. */
+.border-slate-100 {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after,
+  .float-in,
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ----------------------------------------------------------------------- */
+/* Print: clean the run-sheet for paper. Scoped so it does NOT affect the   */
+/* on-screen look — everything here lives inside `@media print`. We hide    */
+/* the sidebar nav and any `.no-print` chrome, flatten the floaty           */
+/* shadows/gradients to white + black + hairline borders, and keep each     */
+/* section from being split across a page break.                            */
+/* ----------------------------------------------------------------------- */
+@media print {
+  /* Hide app chrome: the sidebar nav (tagged .no-print) and any control. */
+  .no-print {
+    display: none !important;
+  }
+
+  /* Kill the decorative sky/cloud background + blobs; pure white paper. */
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  body::before,
+  body::after {
+    display: none !important;
+  }
+
+  /* Main content goes full width now that the nav is gone. */
+  main {
+    flex: 1 1 100% !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Flatten floating cards into simple bordered blocks. */
+  .rs-page .card-float,
+  .rs-page .rs-section {
+    background: #ffffff !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    border: 1px solid #999 !important;
+    border-radius: 6px !important;
+    color: #000000 !important;
+  }
+
+  /* Keep a section (channel block, loop block, events block) on one page.
+     Neutralize the on-screen colored accent border-left to a plain hairline. */
+  .rs-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 10px !important;
+    border-left: 1px solid #999 !important;
+  }
+
+  /* Don't break an individual line item across pages either. */
+  .rs-row {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Tighten the print-only title and reveal it; hide the screen muted tints. */
+  .rs-print-title {
+    display: block !important;
+  }
+  .rs-print-title h1 {
+    font-size: 18pt;
+    font-weight: 800;
+    margin: 0 0 2px;
+    color: #000 !important;
+  }
+  .rs-print-title p {
+    font-size: 10pt;
+    color: #333 !important;
+    margin: 0 0 8px;
+  }
+
+  /* Force readable ink everywhere; status pills become plain bordered chips. */
+  .rs-page h1,
+  .rs-page h2,
+  .rs-page h3,
+  .rs-page p,
+  .rs-page span,
+  .rs-page li {
+    color: #000 !important;
+  }
+  .rs-page .rs-status {
+    background: transparent !important;
+    border: 1px solid #666 !important;
+    color: #000 !important;
+  }
+  /* The empty paper checkbox should print crisp and dark. */
+  .rs-page .rs-check {
+    color: #000 !important;
+  }
+}

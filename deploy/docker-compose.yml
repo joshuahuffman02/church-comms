@@ -1,0 +1,39 @@
+# deploy/docker-compose.yml — optional containerized run.
+#
+# Build context is the repo root ("..") so the whole project is available to the
+# Dockerfile. The SQLite DB and backups live on the HOST via bind mounts, so the
+# container is disposable and your data is never trapped inside it.
+#
+# Usage (run from the repo root):
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#   docker compose -f deploy/docker-compose.yml logs -f
+#   docker compose -f deploy/docker-compose.yml down        # stop (before a restore)
+#
+# Secrets come from the repo's .env file (env_file below). The container reads
+# the DB at /app/dev.db, which is bind-mounted from ./dev.db on the host.
+
+services:
+  comms:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: church-comms
+    container_name: church-comms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      TZ: America/Chicago
+      PORT: "3000"
+      # Inside the container the DB is at /app/dev.db (the bind mount below).
+      DATABASE_URL: "file:/app/dev.db"
+    env_file:
+      # App secrets (AUTH_SECRET, SMTP_*, PCO_*, CRON_SECRET, ...). Optional.
+      - ../.env
+    volumes:
+      # Persist the database file on the host.
+      - ../dev.db:/app/dev.db
+      # Persist backups on the host (so `npm run backup` inside the container,
+      # or a host-side cron, both land in the same place).
+      - ../backups:/app/backups

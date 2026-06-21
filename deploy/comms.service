@@ -1,0 +1,60 @@
+# comms.service — systemd unit for the Church Communications app (Linux).
+#
+# Runs the production server (`npm run start` -> `next start`) and keeps it
+# alive across crashes and reboots. Timezone is pinned to America/Chicago
+# because dates are stored as church-local midnight; a different TZ shifts days.
+#
+# ── INSTALL ──────────────────────────────────────────────────────────────────
+# 1. Edit the paths/user below to match your server:
+#      - WorkingDirectory: absolute path to the repo
+#      - User / Group:     the (non-root) account that owns the repo
+#      - ExecStart:        full path to `npm` (find it with `which npm`)
+# 2. Copy the unit into place and enable it:
+#      sudo cp deploy/comms.service /etc/systemd/system/comms.service
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable --now comms
+# 3. Check status / logs:
+#      systemctl status comms
+#      journalctl -u comms -f
+#
+# Build BEFORE first start (the unit does not build): `npm ci && npm run build`.
+# Secrets live in an env file (see EnvironmentFile below) — never commit it.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[Unit]
+Description=Church Communications (Next.js)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# --- Run as a non-root account that owns the repo (edit these) ---
+User=comms
+Group=comms
+
+# --- Absolute path to the repo (edit this) ---
+WorkingDirectory=/srv/church-comms
+
+# --- Environment ---
+Environment=NODE_ENV=production
+Environment=TZ=America/Chicago
+Environment=PORT=3000
+# App secrets (DATABASE_URL, AUTH_SECRET, SMTP_*, PCO_*, CRON_SECRET, ...).
+# Point this at the repo's .env (chmod 600). Leading '-' = ok if missing.
+EnvironmentFile=-/srv/church-comms/.env
+
+# --- Start the production server (use the absolute path to npm) ---
+ExecStart=/usr/bin/npm run start
+
+# --- Keep it running ---
+Restart=always
+RestartSec=5
+
+# --- Logging goes to the journal (journalctl -u comms) ---
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=comms
+
+[Install]
+WantedBy=multi-user.target

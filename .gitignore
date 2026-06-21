@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Next.js
+.next/
+out/
+build/
+dist/
+next-env.d.ts
+
+# Environment
+.env
+.env*.local
+
+# Database (SQLite lives on the server, never in git)
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+prisma/*.db
+prisma/*.db-journal
+
+# Local + off-box database backups (scripts/backup-db.sh writes here)
+backups/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Brainstorm visual-companion scratch (local only)
+.superpowers/
+
+# Deployment-instance files that belong to one church, not the public product
+instance/
+local-instance/
+local-data/
+
+# Misc
+.vercel
+*.tsbuildinfo
+coverage/
+tmp/
+
+/src/generated/prisma
