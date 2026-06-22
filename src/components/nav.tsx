@@ -118,7 +118,7 @@ export async function Nav() {
       {/* Desktop sidebar. grid-cols-1 (a minmax(0,1fr) column) clamps every row
           to the card width, so a long label wraps instead of stretching the
           whole column past the card background. */}
-      <nav className="no-print card-float sticky top-4 z-20 m-4 hidden h-fit w-56 self-start p-3 lg:grid lg:grid-cols-1">
+      <nav className="no-print card-float sticky top-4 z-20 m-4 hidden h-fit max-h-[calc(100vh-2rem)] w-56 self-start overflow-y-auto overscroll-contain p-3 lg:grid lg:grid-cols-1">
         <div className="mb-1 flex items-center gap-2 px-3 py-3">
           <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-sky-200 to-violet-200 text-lg shadow-sm">
             ☁️
