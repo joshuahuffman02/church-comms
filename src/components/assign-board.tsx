@@ -60,7 +60,20 @@ export function AssignBoard({ channels, model }: { channels: AssignChannel[]; mo
     if (!card || data.byChannel[channelId]?.some((p) => p.requestId === requestId)) return;
     const optimistic: Placement = { deliverableId: `tmp:${requestId}:${channelId}`, requestId, title: card.title, eventStartMs: card.eventStartMs, publishMs: null };
     setData((d) => ({ ...d, byChannel: { ...d.byChannel, [channelId]: [...(d.byChannel[channelId] ?? []), optimistic] } }));
-    start(() => assignChannel(requestId, channelId));
+    start(async () => {
+      const realId = await assignChannel(requestId, channelId);
+      if (realId) {
+        setData((d) => ({
+          ...d,
+          byChannel: {
+            ...d.byChannel,
+            [channelId]: (d.byChannel[channelId] ?? []).map((p) =>
+              p.requestId === requestId && p.deliverableId.startsWith("tmp:") ? { ...p, deliverableId: realId } : p,
+            ),
+          },
+        }));
+      }
+    });
   }
   function remove(channelId: string, deliverableId: string) {
     setData((d) => ({ ...d, byChannel: { ...d.byChannel, [channelId]: d.byChannel[channelId].filter((p) => p.deliverableId !== deliverableId) } }));
@@ -82,6 +95,7 @@ export function AssignBoard({ channels, model }: { channels: AssignChannel[]; mo
       if (!sourcePlacement) return;
       const { requestId } = sourcePlacement;
       if (over === REMOVE || over === "all") { remove(sourceId, deliverableId); return; }
+      // Move is non-atomic: add target then remove source; no rollback on partial failure (accepted design).
       if (over !== sourceId) { add(requestId, over); remove(sourceId, deliverableId); }
     }
   }

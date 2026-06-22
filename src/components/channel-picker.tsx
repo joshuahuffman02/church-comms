@@ -24,7 +24,16 @@ export function ChannelPicker({ channels, placements, requestId, canEdit }: {
       if (!current.deliverableId.startsWith("tmp:")) start(() => removeDeliverable(current.deliverableId));
     } else {
       setOnMap((m) => ({ ...m, [channelId]: { channelId, deliverableId: `tmp:${channelId}`, publishMs: null } }));
-      start(() => assignChannel(requestId, channelId));
+      start(async () => {
+        const realId = await assignChannel(requestId, channelId);
+        if (realId) {
+          setOnMap((m) => {
+            const cur = m[channelId];
+            if (!cur) return m;
+            return { ...m, [channelId]: { ...cur, deliverableId: realId } };
+          });
+        }
+      });
     }
   }
 

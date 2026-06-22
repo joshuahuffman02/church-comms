@@ -17,8 +17,10 @@ function isoDay(d: Date): string {
  * Put an event on a channel at that channel's normal publish lead. Dedups
  * (no-op if already on the channel), then delegates to attachChannel — which
  * bypasses tier (manual override), schedules the touch, logs, and revalidates.
+ * Returns the real deliverable id (new or existing) so callers can reconcile
+ * optimistic tmp: ids, or null when request/channel not found.
  */
-export async function assignChannel(requestId: string, channelId: string): Promise<void> {
+export async function assignChannel(requestId: string, channelId: string): Promise<string | null> {
   await requireEditor();
 
   const [request, channel, dels] = await Promise.all([
@@ -26,14 +28,21 @@ export async function assignChannel(requestId: string, channelId: string): Promi
     db.channel.findUnique({ where: { id: channelId }, select: { defaultPublishOffsetDays: true } }),
     db.deliverable.findMany({ where: { requestId }, select: { id: true, requestId: true, channelId: true, status: true } }),
   ]);
-  if (!request || !channel) return;
+  if (!request || !channel) return null;
 
   const existing: AssignDeliverable[] = dels.map((d) => ({ ...d, publishMs: null }));
-  if (!canAssign(existing, requestId, channelId)) return; // already on this channel
+  if (canAssign(existing, requestId, channelId)) {
+    const date = defaultPublishDate(request.eventStart, channel.defaultPublishOffsetDays);
+    const fd = new FormData();
+    fd.set("channelId", channelId);
+    fd.set("date", isoDay(date));
+    await attachChannel(requestId, fd);
+  }
 
-  const date = defaultPublishDate(request.eventStart, channel.defaultPublishOffsetDays);
-  const fd = new FormData();
-  fd.set("channelId", channelId);
-  fd.set("date", isoDay(date));
-  await attachChannel(requestId, fd);
+  // Always return the current (or newly created) non-skipped deliverable id.
+  const placed = await db.deliverable.findFirst({
+    where: { requestId, channelId, NOT: { status: "skipped" } },
+    select: { id: true },
+  });
+  return placed?.id ?? null;
 }
