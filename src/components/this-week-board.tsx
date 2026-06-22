@@ -234,7 +234,7 @@ function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item
         ⭐ Announcement video — Top 3 for {fmt(sunday)} <span className="text-muted">· {items.length}/3</span>
       </div>
       <div className="text-muted text-xs mb-3">
-        The 3 things to feature on this Sunday&apos;s video — pick upcoming events (any date) or add an awareness item.
+        These are what air on this Sunday&apos;s video — and what the run-of-show &amp; script export. Pick upcoming events (any date) or add an awareness item.
       </div>
       {items.length === 0 && <div className="text-muted text-sm mb-2">No Top 3 picked yet.</div>}
       {items.map((it, i) => (

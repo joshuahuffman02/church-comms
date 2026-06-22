@@ -79,12 +79,43 @@ export function liveEventIds(
  * events) and the `held` set (the rest), preserving input order within each.
  * `getEvent` extracts the {@link RankableEvent} from each item. A null / 0 cap
  * leaves everything live.
+ *
+ * `preferred` (optional) is a human curation that FEATURES events: when given
+ * and non-empty, the `preferred` events lead the live set (in that order — the
+ * announcement-video Top-3 picks), and any remaining slots under the cap are
+ * filled by the normal ranking over the rest. So featuring one event promotes
+ * it to the top without dropping the others off the video. Everything past the
+ * cap is held. (Uncapped → everything stays live, featured first.)
  */
 export function splitByWeeklyCap<T>(
   items: T[],
   getEvent: (item: T) => RankableEvent,
   cap: number | null | undefined,
+  preferred?: readonly string[],
 ): { live: T[]; held: T[] } {
+  if (preferred && preferred.length > 0) {
+    const order = new Map(preferred.map((id, i) => [id, i] as const));
+    const isFeatured = (it: T) => order.has(getEvent(it).requestId);
+    const featured = items
+      .filter(isFeatured)
+      .sort((a, b) => order.get(getEvent(a).requestId)! - order.get(getEvent(b).requestId)!);
+    const rest = items.filter((it) => !isFeatured(it));
+
+    if (cap == null || cap <= 0) {
+      return { live: [...featured, ...rest], held: [] }; // uncapped: featured first, all live
+    }
+    const featuredEvents = new Set(featured.map((it) => getEvent(it).requestId)).size;
+    const fillSlots = cap - featuredEvents;
+    if (fillSlots <= 0) {
+      return { live: featured, held: rest }; // picks already fill the cap
+    }
+    const fillIds = liveEventIds(rest.map(getEvent), fillSlots);
+    const fillLive: T[] = [];
+    const held: T[] = [];
+    for (const it of rest) (fillIds.has(getEvent(it).requestId) ? fillLive : held).push(it);
+    return { live: [...featured, ...fillLive], held };
+  }
+
   const live = liveEventIds(items.map(getEvent), cap);
   const liveItems: T[] = [];
   const heldItems: T[] = [];

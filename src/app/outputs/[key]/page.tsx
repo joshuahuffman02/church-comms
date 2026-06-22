@@ -12,6 +12,8 @@ import { TouchRemoveButton } from "@/components/touch-remove-button";
 import { TouchContentEditor } from "@/components/touch-content-editor";
 import { MinistryDots } from "@/components/ministry-dots";
 import { phaseLabel } from "@/lib/labels";
+import { comingSunday } from "@/lib/week";
+import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -89,8 +91,14 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
   if (!channel || !channel.active) notFound();
 
   const today = new Date();
+  // For the announcement video, the hand-picked Top-3 is the featured (live) set
+  // this week; everything else over the cap shows as "held".
+  const preferred =
+    channel.key === "announcement_video"
+      ? pickedRequestIds(await loadSundayTop3(comingSunday(today)))
+      : undefined;
   const [week, upcoming] = await Promise.all([
-    curatedTouchesThisWeekForChannel(channel, today),
+    curatedTouchesThisWeekForChannel(channel, today, preferred),
     upcomingTouchesForChannel(channel.id, today),
   ]);
   const { live, held, liveEventCount, cap } = week;

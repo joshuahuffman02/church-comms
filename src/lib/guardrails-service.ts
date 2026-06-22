@@ -60,13 +60,22 @@ function loadActiveRequests() {
  * back to events and `getGuardrailsForRequest` can filter.
  */
 export async function getGuardrails(today: Date): Promise<Guardrail[]> {
-  const [requests, setting, campaigns] = await Promise.all([
+  const [requests, setting, campaigns, top3] = await Promise.all([
     loadActiveRequests(),
     db.setting.findUnique({ where: { id: 1 } }),
     db.campaign.findMany(),
+    db.videoTop3Item.findMany({ select: { sunday: true } }),
   ]);
 
   const thresholdPct = setting?.reachThresholdPct ?? DEFAULT_REACH_THRESHOLD;
+
+  // How many announcement-video slots are already PICKED per Sunday — so a
+  // fully-picked over-cap downgrades from "needs a decision" to informational.
+  const pickedBySunday = new Map<string, number>();
+  for (const p of top3) {
+    const k = isoDay(p.sunday);
+    pickedBySunday.set(k, (pickedBySunday.get(k) ?? 0) + 1);
+  }
 
   // Only flag decisions you can still act on: ignore touches before THIS week's
   // start, so past Sundays (already aired) don't linger as "needs a decision".
@@ -133,6 +142,7 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
     capacity: b.capacity,
     requestIds: [...b.requestIds],
     titles: b.titles,
+    pickedCount: b.channelKey === "announcement_video" ? pickedBySunday.get(b.whenISO) ?? 0 : undefined,
   }));
   const weekLoads: ChannelWeekLoad[] = [...weekMap.values()].map((b) => ({
     channelKey: b.channelKey,

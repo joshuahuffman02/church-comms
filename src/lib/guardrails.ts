@@ -25,13 +25,21 @@ export interface InstanceLoad {
   capacity: number;
   requestIds: string[];
   titles: string[];
+  /**
+   * How many of this instance's slots are already CURATED (the announcement-
+   * video Top-3 picks for this Sunday). When the picks fill the capacity, the
+   * over-cap is a decision already made — it downgrades from an actionable
+   * `block` to an informational `info` instead of nagging forever.
+   */
+  pickedCount?: number;
 }
 
 /**
  * Capacity cap: any instance whose number of requests exceeds the channel's
- * capacity is a hard `block`. The `loop` channel reports as `loop_cap`; every
- * other capacity-capped channel (stage / announcement video) reports as
- * `stage_cap`.
+ * capacity needs a decision (`block`) — UNLESS that many slots are already
+ * picked, in which case it's a resolved, informational heads-up (`info`). The
+ * `loop` channel reports as `loop_cap`; every other capacity-capped channel
+ * (stage / announcement video) reports as `stage_cap`.
  */
 export function evaluateCapacity(loads: InstanceLoad[]): Guardrail[] {
   const out: Guardrail[] = [];
@@ -39,12 +47,15 @@ export function evaluateCapacity(loads: InstanceLoad[]): Guardrail[] {
     if (load.requestIds.length <= load.capacity) continue;
     const kind = load.channelKey === "loop" ? "loop_cap" : "stage_cap";
     const over = load.requestIds.length;
+    const resolved = (load.pickedCount ?? 0) >= load.capacity;
     out.push({
       kind,
-      severity: "block",
-      message:
-        `${over} events are scheduled on this output for ${load.whenISO}, ` +
-        `but only ${load.capacity} fit — pick which ${load.capacity} to keep.`,
+      severity: resolved ? "info" : "block",
+      message: resolved
+        ? `${over} events want this output for ${load.whenISO} — your ${load.capacity} are featured; ` +
+          `the rest are held.`
+        : `${over} events are scheduled on this output for ${load.whenISO}, ` +
+          `but only ${load.capacity} fit — pick which ${load.capacity} to keep.`,
       whenISO: load.whenISO,
       channelKey: load.channelKey,
       requestIds: load.requestIds,
