@@ -42,6 +42,7 @@ const SECTIONS: Section[] = [
     heading: "Make & send",
     items: [
       { href: "/pipeline", label: "Production", icon: "🗂️" },
+      { href: "/assign", label: "Assign", icon: "🧲" },
       { href: "/exports", label: "Downloads", icon: "⬇️" },
     ],
   },
@@ -53,6 +54,7 @@ const SECTIONS: Section[] = [
     heading: "Setup",
     items: [
       { href: "/import/planning-center", label: "Import from Planning Center", icon: "🗓️", adminOnly: true },
+      { href: "/import/google", label: "Import from Google", icon: "📆", adminOnly: true },
       { href: "/import/ical", label: "Import a calendar (.ics)", icon: "📥", adminOnly: true },
       { href: "/settings", label: "Settings", icon: "⚙️", adminOnly: true },
       { href: "/help", label: "Help & how-to", icon: "📖", exact: true },
@@ -94,7 +96,7 @@ export async function Nav() {
       className="nav-link flex shrink-0 items-center rounded-2xl py-2 pl-4 pr-3 text-ink/90"
     >
       <span className="mr-2.5 text-base">{i.icon}</span>
-      <span className="whitespace-nowrap font-medium">{i.label}</span>
+      <span className="font-medium leading-tight">{i.label}</span>
       {i.badge === "guardrails" && guardrailCount > 0 && (
         <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
           {guardrailCount}
@@ -113,8 +115,10 @@ export async function Nav() {
         guardrailCount={guardrailCount}
       />
 
-      {/* Desktop sidebar. */}
-      <nav className="no-print card-float sticky top-4 z-20 m-4 hidden h-fit w-56 self-start p-3 lg:grid">
+      {/* Desktop sidebar. grid-cols-1 (a minmax(0,1fr) column) clamps every row
+          to the card width, so a long label wraps instead of stretching the
+          whole column past the card background. */}
+      <nav className="no-print card-float sticky top-4 z-20 m-4 hidden h-fit w-56 self-start p-3 lg:grid lg:grid-cols-1">
         <div className="mb-1 flex items-center gap-2 px-3 py-3">
           <span className="grid h-9 w-9 place-items-center rounded-2xl bg-gradient-to-br from-sky-200 to-violet-200 text-lg shadow-sm">
             ☁️
@@ -167,8 +171,8 @@ export async function Nav() {
             href={`/outputs/${c.key}`}
             className="nav-link flex shrink-0 items-center gap-2.5 rounded-2xl py-2 pl-4 pr-3 text-sm text-ink/85"
           >
-            <span className="inline-block h-2.5 w-2.5 rounded-full ring-2 ring-white/70" style={{ background: c.color }} />
-            <span className="whitespace-nowrap">{c.name}</span>
+            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/70" style={{ background: c.color }} />
+            <span className="leading-tight">{c.name}</span>
           </NavLink>
         ))}
       </nav>
