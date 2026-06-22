@@ -16,6 +16,7 @@ import { OwnerAssign } from "@/components/owner-assign";
 import { AssetAttach, type AssetRow } from "@/components/asset-attach";
 import { PcoUnlinkButton } from "@/components/pco-unlink-button";
 import { MinistryDots } from "@/components/ministry-dots";
+import { ChannelPicker, type PickerPlacement } from "@/components/channel-picker";
 import { getSessionUser } from "@/lib/authz";
 import { effectiveOwnerId } from "@/lib/tasks";
 import { isEditor } from "@/lib/roles";
@@ -83,7 +84,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
     db.channel.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      select: { key: true, name: true, color: true },
+      select: { id: true, key: true, name: true, color: true },
     }),
     db.eventTemplate.findMany({
       where: { active: true },
@@ -166,6 +167,19 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       explicitOwner: d.ownerId != null,
     };
   });
+
+  const placements: PickerPlacement[] = request.deliverables
+    .filter((d) => d.status !== "skipped")
+    .map((d) => {
+      const sortedTouches = [...d.touches].sort(
+        (a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime(),
+      );
+      return {
+        channelId: d.channelId,
+        deliverableId: d.id,
+        publishMs: sortedTouches[0]?.scheduledAt.getTime() ?? null,
+      };
+    });
 
   const assetRows: AssetRow[] = request.assets.map((a) => ({
     id: a.id,
@@ -525,6 +539,9 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
 
       {/* Admin Checklist: dated admin tasks from playbooks + manual tasks */}
       <EventTasks requestId={request.id} tasks={taskRows} templates={templateOptions} canEdit={canEdit} />
+
+      {/* Channel picker — where this event's promo is going */}
+      <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
 
       {/* Deliverables */}
       <DeliverableList rows={rows} users={activeUsers} currentUserId={me?.id ?? ""} canEdit={canEdit} />
