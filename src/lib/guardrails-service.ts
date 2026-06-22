@@ -68,6 +68,10 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
 
   const thresholdPct = setting?.reachThresholdPct ?? DEFAULT_REACH_THRESHOLD;
 
+  // Only flag decisions you can still act on: ignore touches before THIS week's
+  // start, so past Sundays (already aired) don't linger as "needs a decision".
+  const cutoff = atMidnight(weekRange(today).start).getTime();
+
   // --- InstanceLoad[]: dated_instance touches grouped by (channelKey, instanceDate). ---
   // Key by channelKey + the touch's calendar day; track distinct requestIds.
   const instanceMap = new Map<
@@ -84,6 +88,7 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
     for (const del of req.deliverables) {
       const ch = del.channel;
       for (const t of del.touches) {
+        if (atMidnight(t.scheduledAt).getTime() < cutoff) continue; // skip the past
         if (ch.type === "dated_instance") {
           const whenISO = isoDay(t.scheduledAt);
           const key = `${ch.key}|${whenISO}`;

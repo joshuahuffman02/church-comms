@@ -51,6 +51,24 @@ export function prettyDate(iso: string): string {
   return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+/**
+ * Promotion phase (engine `Phase`) -> plain words describing what that week's
+ * post is doing. Shown on the per-channel output rows instead of "day_of" etc.
+ */
+export const PHASE_LABEL: Record<string, string> = {
+  awareness: "Save the date",
+  register: "Sign up",
+  reminder: "Reminder",
+  day_of: "Day of",
+  follow_up: "Follow-up",
+};
+
+/** Friendly phase label; null when there's nothing to show. */
+export function phaseLabel(phase: string | null | undefined): string | null {
+  if (!phase) return null;
+  return PHASE_LABEL[phase] ?? titleCase(phase);
+}
+
 /** Planning Center approval codes -> human words. */
 export const PCO_STATUS_LABEL: Record<string, string> = {
   A: "Approved in Planning Center",

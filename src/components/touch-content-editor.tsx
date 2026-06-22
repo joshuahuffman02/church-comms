@@ -53,7 +53,7 @@ export function TouchContentEditor({
         className="text-xs font-semibold text-sky-700 hover:underline"
         aria-expanded={false}
       >
-        ✎ content{hasContent ? " ●" : ""}
+        ✎ {hasContent ? "Wording added ●" : "Add wording"}
       </button>
     );
   }

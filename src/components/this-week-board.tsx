@@ -21,14 +21,20 @@ type Row = {
 const fmt = (d: Date | null) =>
   d ? d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : "";
 
+// Cap long lists so a backlog (e.g. lots of past-due imported events) doesn't
+// become a wall — show the soonest few, then a link to the full board.
+const SECTION_LIMIT = 8;
+
 function Section({ title, color, rows, kind, hint }: { title: string; color: string; rows: Row[]; kind: "make" | "video" | "risk"; hint?: string }) {
+  const shown = rows.slice(0, SECTION_LIMIT);
+  const more = rows.length - shown.length;
   return (
     <div className="card-float p-5 mb-4" style={{ borderLeft: `5px solid ${color}` }}>
       <div className="font-bold mb-1">{title} <span className="text-muted">· {rows.length}</span></div>
       {hint && <div className="text-muted text-xs mb-3">{hint}</div>}
       {!hint && <div className="mb-2" />}
       {rows.length === 0 && <div className="text-muted text-sm">Nothing here this week 🎉</div>}
-      {rows.map(r => (
+      {shown.map(r => (
         <div key={r.id} className="flex items-center justify-between gap-3 py-2 border-t border-slate-100 text-sm">
           <Link href={`/requests/${r.requestId}`} className="hover:underline">
             <b>{r.request.title}</b> <span className="text-muted">· {r.channel.name}</span>
@@ -47,6 +53,14 @@ function Section({ title, color, rows, kind, hint }: { title: string; color: str
           </div>
         </div>
       ))}
+      {more > 0 && (
+        <Link
+          href="/pipeline"
+          className="mt-1 block border-t border-slate-100 pt-3 text-sm font-semibold text-sky-600 hover:underline"
+        >
+          +{more} more — see all in Production →
+        </Link>
+      )}
     </div>
   );
 }
