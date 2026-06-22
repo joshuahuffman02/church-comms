@@ -3,6 +3,7 @@ import { pcoConfigured } from "@/lib/pco";
 import { syncApprovedPcoEvents } from "@/actions/pco";
 import { syncRooms, type SyncRoomsResult } from "@/lib/pco-rooms-sync";
 import { generateAllSeries } from "@/actions/recurring";
+import { syncGoogleCalendar, type GoogleSyncResult } from "@/lib/google-intake";
 
 // Scheduled auto-sync endpoint. The middleware (src/proxy.ts) lets `api/cron`
 // through without a user session, so this route guards ITSELF with CRON_SECRET.
@@ -38,10 +39,20 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     // PCO is configured, so standing items keep generating on their own.
     const series = await generateAllSeries();
 
+    // Google Calendar intake — independent of PCO and isolated, so a Google
+    // fetch failure can't fail the rest of the sync. Pulls new calendar entries
+    // in as stub events + their ripening checklist.
+    let google: GoogleSyncResult | { error: string };
+    try {
+      google = await syncGoogleCalendar();
+    } catch (err) {
+      google = { error: err instanceof Error ? err.message : "Google sync failed" };
+    }
+
     // PCO sync only when wired up — skip quietly otherwise so the cron job
     // doesn't alarm.
     if (!pcoConfigured()) {
-      return NextResponse.json({ ok: true, series, pco: "not configured" });
+      return NextResponse.json({ ok: true, series, google, pco: "not configured" });
     }
     const counts = await syncApprovedPcoEvents();
 
@@ -55,7 +66,7 @@ async function handle(req: NextRequest): Promise<NextResponse> {
       rooms = { error: err instanceof Error ? err.message : "Rooms sync failed" };
     }
 
-    return NextResponse.json({ ok: true, series, ...counts, rooms });
+    return NextResponse.json({ ok: true, series, google, ...counts, rooms });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
     return NextResponse.json({ ok: false, error: message }, { status: 502 });

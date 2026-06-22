@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { pcoConfigured } from "@/lib/pco";
+import { googleCalendarConfigured } from "@/lib/google-intake";
 import { AdminOnlyCard } from "@/components/admin-only-card";
 import { SettingsNav } from "@/components/settings-nav";
 import { PcoTestButton } from "@/components/pco-test-button";
@@ -27,6 +28,7 @@ export default async function ConnectionsSettings() {
   }
 
   const pco = pcoConfigured();
+  const google = googleCalendarConfigured();
   const email = !!process.env.SMTP_HOST;
   const ical = !!process.env.ICAL_IMPORT_FILE;
 
@@ -86,6 +88,35 @@ export default async function ConnectionsSettings() {
             </a>
             .
           </p>
+        </details>
+      </div>
+
+      {/* Google Calendar */}
+      <div className="card-float p-5 mb-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-bold">📆 Google Calendar</h2>
+          <StatusPill ok={google} />
+        </div>
+        <p className="text-muted mt-1 text-sm">
+          Pulls events from your church Google Calendar in as tentative entries, each with a setup
+          checklist (read-only — a casual front door, not the source of truth).
+        </p>
+        <div className="mt-3">
+          <Link href="/import/google" className="text-sm font-semibold text-sky-600 hover:underline">
+            Go to import →
+          </Link>
+        </div>
+        <details className="mt-3 rounded-2xl border bg-sky-bg/40 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-ink select-none">
+            Setup details for your tech helper
+          </summary>
+          <p className="text-muted mt-2">
+            In Google Calendar → Settings → Integrate calendar, copy the <b>Secret iCal address</b>, then
+            set it on the server&apos;s <code className="font-mono">.env</code> and restart:
+          </p>
+          <div className="mt-2 rounded-xl border bg-white px-4 py-3 font-mono text-ink">
+            <div>GOOGLE_CALENDAR_URL=&quot;https://calendar.google.com/.../basic.ics&quot;</div>
+          </div>
         </details>
       </div>
 
