@@ -56,8 +56,8 @@ export function DeliverableList({
   if (rows.length === 0) {
     return (
       <div className="card-float p-5 mb-4">
-        <h2 className="font-bold mb-2">Deliverables</h2>
-        <p className="text-muted text-sm">Not yet scheduled — approve to generate the plan.</p>
+        <h2 className="font-bold mb-2">Pieces to make</h2>
+        <p className="text-muted text-sm">Not planned yet — approve the event to build the plan.</p>
       </div>
     );
   }
@@ -65,7 +65,7 @@ export function DeliverableList({
   return (
     <div className="card-float p-5 mb-4">
       <h2 className="font-bold mb-3">
-        Deliverables <span className="text-muted font-normal">· {rows.length}</span>
+        Pieces to make <span className="text-muted font-normal">· {rows.length}</span>
       </h2>
       <div className="grid gap-2">
         {rows.map((d) => (
@@ -107,9 +107,7 @@ export function DeliverableList({
                   {d.lockLeadDays != null ? ` · locks ${fmt(d.productionDueAt)}` : ""}
                 </span>
               )}
-              <span>
-                {d.touchCount} touch{d.touchCount === 1 ? "" : "es"}
-              </span>
+              <span>appears {d.touchCount}×</span>
               {canEdit && d.status !== "skipped" && (
                 <DeliverableArtLink deliverableId={d.id} assetLink={d.assetLink} />
               )}

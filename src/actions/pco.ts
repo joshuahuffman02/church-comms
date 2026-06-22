@@ -7,6 +7,7 @@ import { ministryCreateData } from "@/lib/ministries";
 import { classifyByTags, type TagRule } from "@/lib/tag-rules";
 import {
   fetchApprovedUpcomingPcoEvents,
+  fetchUpcomingPcoEvents,
   fetchPcoPerson,
   fetchEventRoomStatus,
   pcoPolitePause,
@@ -243,6 +244,36 @@ export async function importPcoEvents(pcoEventIds: string[]): Promise<number> {
   revalidatePath("/requests");
   revalidatePath("/import/planning-center");
   return created;
+}
+
+/**
+ * Check whether the Planning Center connection actually works, without importing
+ * anything. Admin-guarded. Returns a friendly {ok, message} the Connections page
+ * can show — so an admin can confirm the credentials are good before relying on
+ * the sync.
+ */
+export async function testPcoConnection(): Promise<{ ok: boolean; message: string }> {
+  await requireAdmin();
+  if (!pcoConfigured()) {
+    return { ok: false, message: "Not connected yet — no Planning Center credentials are set." };
+  }
+  try {
+    const events = await fetchUpcomingPcoEvents();
+    return {
+      ok: true,
+      message: `Connected — Planning Center returned ${events.length} upcoming event${
+        events.length === 1 ? "" : "s"
+      }.`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      message:
+        err instanceof Error
+          ? `Couldn't reach Planning Center: ${err.message}`
+          : "Couldn't reach Planning Center. Double-check the credentials.",
+    };
+  }
 }
 
 /**

@@ -5,6 +5,8 @@ import { isAdmin } from "@/lib/roles";
 import { updateChannel, createChannel } from "@/actions/channels";
 import { AdminOnlyCard } from "@/components/admin-only-card";
 import { ChannelDeleteButton } from "@/components/channel-delete-button";
+import { SettingsNav } from "@/components/settings-nav";
+import { tierLabel } from "@/lib/labels";
 
 const WEEKDAYS = [
   { value: 0, label: "Sun" },
@@ -25,45 +27,19 @@ export default async function Channels() {
   const channels = await db.channel.findMany({ orderBy: { sortOrder: "asc" } });
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-2">Outputs &amp; channels ⚙️</h1>
+      <SettingsNav />
+      <h1 className="text-2xl font-extrabold mb-2">Channels ⚙️</h1>
 
       <p className="text-muted mb-4 leading-relaxed">
-        Each output has two timings. <b className="text-ink">Goes out</b> = how
+        Each channel has two timings. <b className="text-ink">Goes out</b> = how
         many days before the event it starts appearing on that channel.{" "}
         <b className="text-ink">Asset due</b> = how many days before <i>that</i>{" "}
         the finished graphic/video must be ready. The{" "}
         <Link href="/this-week" className="underline">
-          Make / Design this week
+          Make this week
         </Link>{" "}
         board lists assets whose <i>Asset due</i> date lands this week.
       </p>
-
-      <div className="card-float p-4 mb-4 flex flex-wrap items-center gap-4 text-sm font-semibold">
-        <Link href="/settings/ministries" className="hover:underline">
-          🎨 Ministries
-        </Link>
-        <Link href="/settings/users" className="hover:underline">
-          👥 Team &amp; access
-        </Link>
-        <Link href="/settings/sprints" className="hover:underline">
-          🏃 Sprints
-        </Link>
-        <Link href="/settings/approvals" className="hover:underline">
-          ✅ Approvals
-        </Link>
-        <Link href="/settings/video-script" className="hover:underline">
-          🎬 Video script
-        </Link>
-        <Link href="/settings/playbooks" className="hover:underline">
-          📋 Playbooks
-        </Link>
-        <Link href="/settings/tag-rules" className="hover:underline">
-          🏷️ Tag rules
-        </Link>
-        <Link href="/guardrails" className="hover:underline">
-          🛡️ Guardrails
-        </Link>
-      </div>
 
       {channels.map((c) => (
         <form
@@ -134,17 +110,17 @@ export default async function Channels() {
               className="w-full rounded-2xl border px-3 py-2 font-normal resize-y"
             />
             <span className="block mt-1 text-xs">
-              Reference shown on this output’s page header — dimensions, lead
+              Reference shown on this channel’s page header — dimensions, lead
               times, lessons learned.
             </span>
           </label>
         </form>
       ))}
 
-      {/* ---- Add a new output / channel ----------------------------------- */}
+      {/* ---- Add a new channel -------------------------------------------- */}
       <details className="card-float p-4 mt-6">
         <summary className="cursor-pointer font-semibold text-ink select-none">
-          ＋ Add output / channel
+          ＋ Add a channel
         </summary>
         <form action={createChannel} className="mt-4 grid gap-4">
           <div className="flex flex-wrap items-center gap-3">
@@ -164,9 +140,9 @@ export default async function Channels() {
                 defaultValue="windowed"
                 className="ml-2 rounded-full border px-3 py-1 text-sm font-normal"
               >
-                <option value="windowed">Windowed (runs over a span)</option>
-                <option value="dated_instance">Dated instance (one airing)</option>
-                <option value="one_shot">One-shot (single send)</option>
+                <option value="windowed">Runs for a while (over a span of days)</option>
+                <option value="dated_instance">Happens once on a date</option>
+                <option value="one_shot">Sent once</option>
               </select>
             </label>
             <label className="text-sm font-semibold">
@@ -224,7 +200,7 @@ export default async function Channels() {
                     defaultChecked
                     className="mr-1"
                   />
-                  Tier {t}
+                  {tierLabel(t)}
                 </label>
               ))}
             </div>
@@ -232,7 +208,7 @@ export default async function Channels() {
 
           <fieldset className="text-sm">
             <legend className="font-semibold mb-1">
-              Cadence — which weekdays it posts (windowed only)
+              Which days does it post? (for &ldquo;runs for a while&rdquo; channels)
             </legend>
             <div className="flex flex-wrap gap-3 text-muted">
               {WEEKDAYS.map((d) => (

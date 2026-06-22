@@ -8,6 +8,7 @@ import {
   loadVideoThisWeek,
   loadVideoScriptThisWeek,
 } from "@/lib/exports";
+import { CopyButton } from "@/components/copy-button";
 
 // These previews reflect live DB state, so render them fresh each request.
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ function ExportCard({
   filename,
   text,
   accent,
+  mono = false,
 }: {
   title: string;
   blurb: string;
@@ -26,6 +28,8 @@ function ExportCard({
   filename: string;
   text: string;
   accent: string;
+  // The ProPresenter loop list is a fixed-width list; prose exports read as prose.
+  mono?: boolean;
 }) {
   const empty = text.split("\n").filter(Boolean).length <= 1;
   return (
@@ -37,16 +41,23 @@ function ExportCard({
           </h2>
           <p className="text-muted text-sm mt-0.5">{blurb}</p>
         </div>
-        <a
-          href={href}
-          download={filename}
-          className="shrink-0 rounded-2xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
-          style={{ background: accent }}
-        >
-          ⬇️ Download
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <CopyButton text={text} accent={accent} />
+          <a
+            href={href}
+            download={filename}
+            className="rounded-2xl px-4 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+            style={{ background: accent }}
+          >
+            ⬇️ Download
+          </a>
+        </div>
       </div>
-      <pre className="rounded-2xl bg-sky-bg p-4 text-sm whitespace-pre-wrap break-words font-mono text-ink overflow-x-auto">
+      <pre
+        className={`rounded-2xl bg-sky-bg p-4 text-sm whitespace-pre-wrap break-words text-ink overflow-x-auto ${
+          mono ? "font-mono" : "font-sans"
+        }`}
+      >
         {empty ? `${text}\n\n(Nothing scheduled for this export yet.)` : text}
       </pre>
     </section>
@@ -69,9 +80,9 @@ export default async function ExportsPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-1">Exports ⬇️</h1>
+      <h1 className="text-2xl font-extrabold mb-1">Downloads ⬇️</h1>
       <p className="text-muted mb-5">
-        This week&apos;s ready-to-use outputs · preview, then download or copy.
+        This week&apos;s ready-to-use copy &amp; lists · preview, then copy or download.
       </p>
 
       <div className="grid gap-4">
@@ -82,6 +93,7 @@ export default async function ExportsPage() {
           filename="pre-service-loop.txt"
           text={loopText}
           accent="#34d399"
+          mono
         />
         <ExportCard
           title="Bulletin Copy"

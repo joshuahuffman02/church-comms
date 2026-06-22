@@ -47,14 +47,22 @@ export default async function IcalImportPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-2">iCal import preview</h1>
+      <h1 className="text-2xl font-extrabold mb-2">Import from a calendar (.ics)</h1>
       <div className="card-float border border-amber-200 bg-amber-50 p-5">
-        <div className="font-bold text-amber-800 mb-1">iCal import is not ready</div>
-        <p className="text-sm text-amber-800 mb-3">{data.error}</p>
-        <p className="text-sm text-muted">
-          Set <code className="font-mono">ICAL_IMPORT_FILE</code> to the absolute
-          path of an <code className="font-mono">.ics</code> file on this server.
+        <div className="font-bold text-amber-800 mb-1">No calendar file connected yet</div>
+        <p className="text-sm text-amber-800 mb-3">
+          This is a one-time technical setup — send this page to whoever installed the app if you&apos;re unsure.
         </p>
+        <details className="rounded-2xl border border-amber-200 bg-white/70 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-amber-900 select-none">
+            Setup details for your tech helper
+          </summary>
+          <p className="text-muted mt-2">
+            Set <code className="font-mono">ICAL_IMPORT_FILE</code> to the absolute
+            path of an <code className="font-mono">.ics</code> file on this server.
+          </p>
+          <p className="text-muted mt-2 text-xs">{data.error}</p>
+        </details>
       </div>
       <Link href="/import/planning-center" className="mt-4 inline-block text-sm font-semibold underline">
         Back to Planning Center import

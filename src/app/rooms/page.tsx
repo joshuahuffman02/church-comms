@@ -20,23 +20,34 @@ function EmptyState({ configured }: { configured: boolean }) {
   return (
     <div className="card-float p-6 bg-sky-bg/40 max-w-2xl">
       <div className="text-lg font-bold mb-2">
-        {configured ? "No rooms synced yet" : "Connect Planning Center"}
+        {configured ? "No rooms synced yet" : "Planning Center isn't connected yet"}
       </div>
       {configured ? (
         <p className="text-sm text-muted">
-          Rooms come from Planning Center Calendar. Run the sync to pull them in —
-          the scheduled job at{" "}
-          <code className="font-mono">/api/cron/sync-events</code> does this
-          automatically, or you can trigger it manually. Rooms and their upcoming
-          bookings will appear here, read-only.
+          Rooms appear here automatically once Planning Center syncs — your bookable
+          rooms and their upcoming bookings, read-only. The sync runs on its own; if
+          you just connected, give it a few minutes.
         </p>
       ) : (
-        <p className="text-sm text-muted">
-          Add Planning Center API credentials to your <code>.env</code> file, then
-          restart the app and run the sync. Your bookable rooms — and every
-          upcoming event in each — will appear here. Planning Center stays the
-          source of truth; this is a one-way, read-only pull.
-        </p>
+        <>
+          <p className="text-sm text-muted">
+            Once Planning Center is connected, your bookable rooms — and every
+            upcoming event in each — appear here automatically. Planning Center
+            stays the source of truth; this is a one-way, read-only pull. Connecting
+            is a <b>one-time technical setup</b>.
+          </p>
+          <details className="mt-3 rounded-2xl border bg-white px-4 py-3 text-sm">
+            <summary className="cursor-pointer font-semibold text-ink select-none">
+              Setup details for your tech helper
+            </summary>
+            <p className="text-muted mt-2">
+              Add Planning Center API credentials to the server&apos;s{" "}
+              <code className="font-mono">.env</code> file, restart the app, then let
+              the sync job at <code className="font-mono">/api/cron/sync-events</code>{" "}
+              run.
+            </p>
+          </details>
+        </>
       )}
     </div>
   );

@@ -467,7 +467,7 @@ export function EventUpdates({
   return (
     <div className="card-float p-5 mb-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="font-bold">Message Arc / Updates</h2>
+        <h2 className="font-bold">Promotion plan</h2>
         {canEdit && (
         <div className="ml-auto flex items-center gap-2">
           {empty && (

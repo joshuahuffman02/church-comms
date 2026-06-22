@@ -30,7 +30,7 @@ export default async function Help() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-extrabold mb-1">How-To 📖</h1>
+      <h1 className="text-2xl font-extrabold mb-1">Help &amp; how-to 📖</h1>
       <p className="text-muted mb-6">
         A friendly guide to how this app helps you plan and produce church
         communications. Skim it once; come back to any section when you need it.
@@ -39,7 +39,7 @@ export default async function Help() {
       <Card icon="💡" title="The big idea">
         <p>
           An event comes in — you enter it, or it syncs from Planning Center.
-          You set <b>who it&apos;s for</b> (its tier). The app then{" "}
+          You set <b>who it&apos;s for</b> (its audience). The app then{" "}
           <b>auto-builds a per-channel schedule</b>: when each piece gets made
           and when it goes out. You make the assets, mark them done, and
           everything is tracked on the calendar and your{" "}
@@ -50,7 +50,7 @@ export default async function Help() {
         </p>
       </Card>
 
-      <Card icon="📣" title="Your Outputs (channels)">
+      <Card icon="📣" title="Your channels">
         <p>
           Each <b>channel</b> is one place things go — for example the
           Announcement Video (Top 3), Sunday Loop, the App, Facebook, Instagram,
@@ -84,23 +84,23 @@ export default async function Help() {
           week means the slide must be designed about <b>3 weeks</b> before the
           event. The{" "}
           <Link href="/this-week" className="underline">
-            Make / Design this week
+            Make this week
           </Link>{" "}
           board lists assets whose <i>Asset due</i> date lands this week.
         </p>
       </Card>
 
-      <Card icon="🎯" title="Tiers">
-        <p>The tier decides which channels an event is allowed on.</p>
+      <Card icon="🎯" title="Audience (tier)">
+        <p>Who an event is for decides which channels it&apos;s allowed on.</p>
         <ul className="list-disc pl-5 space-y-1">
           <li>
-            <b>Tier 1 — church-wide</b> (everyone): can use all channels.
+            <b>Whole church</b> (Tier 1): can use all channels.
           </li>
           <li>
-            <b>Tier 2 — one ministry</b>: targeted channels only.
+            <b>Ministry</b> (Tier 2): targeted channels only.
           </li>
           <li>
-            <b>Tier 3 — niche</b>: direct channels only.
+            <b>Small group</b> (Tier 3): direct channels only.
           </li>
         </ul>
       </Card>
@@ -127,15 +127,15 @@ export default async function Help() {
           </li>
           <li>
             <Link href="/outputs" className="underline">
-              Outputs
+              Channels
             </Link>{" "}
             — what&apos;s on each channel this week.
           </li>
           <li>
             <Link href="/pipeline" className="underline">
-              Pipeline
+              Production
             </Link>{" "}
-            — drag events through their stages.
+            — drag each piece through its stages.
           </li>
         </ul>
       </Card>
@@ -146,35 +146,34 @@ export default async function Help() {
           Submitted → Triaged → Approved → In Production → Proof → Scheduled →
           Published
         </p>
-        <p>Each deliverable (one asset for one channel) moves through:</p>
+        <p>Each piece to make (one asset for one channel) moves through:</p>
         <p className="text-sm font-semibold text-muted">
-          To-design → In progress → Ready → Published
+          To design → In progress → Ready → Published
         </p>
       </Card>
 
-      <Card icon="🛡️" title="Guardrails">
+      <Card icon="🛡️" title="Heads-up">
         <p>
           The everyday “less is more” limits that keep your communications from
           overwhelming people: top-3 on the announcement video, no more than ~10
           loop slides, the 1-in-5 promo cap, and reach checks. The{" "}
           <Link href="/guardrails" className="underline">
-            Guardrails
+            Heads-up
           </Link>{" "}
           page flags overload so you can trim before it ships.
         </p>
       </Card>
 
-      <Card icon="🏃" title="Sprints">
+      <Card icon="🏃" title="Big pushes">
         <p>
-          A <b>sprint</b> is a temporary, all-out promotion window for a BIG
-          event — Christmas, Easter, VBS — that <b>suspends the guardrail
-          limits</b> for 1–2 weeks. Use them only a few times a year for your
-          biggest pushes; each one is tracked against an annual quota so they
-          stay special.
+          A <b>big push</b> is a temporary, all-out promotion window for a BIG
+          event — Christmas, Easter, VBS — that <b>suspends the everyday limits</b>{" "}
+          for 1–2 weeks. Use them only a few times a year for your biggest pushes;
+          each one is tracked against an annual quota so they stay special.
         </p>
         <p className="text-muted text-sm">
-          Quick contrast: <b>Tier</b> = audience size, <b>Guardrails</b> =
-          everyday limits, <b>Sprint</b> = a deliberate, temporary override.
+          Quick contrast: <b>Audience</b> = who it&apos;s for, <b>Heads-up</b> =
+          everyday limits, <b>Big push</b> = a deliberate, temporary override.
         </p>
       </Card>
 
@@ -199,48 +198,58 @@ export default async function Help() {
         </p>
       </Card>
 
-      <Card icon="⬇️" title="Exports">
+      <Card icon="⬇️" title="Downloads">
         <p>
           From the{" "}
           <Link href="/exports" className="underline">
-            Exports
+            Downloads
           </Link>{" "}
-          page you can download the pre-service loop list, the bulletin copy, and
-          the announcement-video run-of-show.
+          page you can copy or download the pre-service loop list, the bulletin
+          copy, and the announcement-video run-of-show.
         </p>
       </Card>
 
-      <Card icon="📚" title="Glossary">
+      <Card icon="📚" title="Word list">
+        <p className="text-muted text-sm">
+          A few words you&apos;ll see, in plain terms (with the older name in
+          parentheses):
+        </p>
         <dl className="grid gap-2">
           <div>
-            <dt className="font-semibold inline">Output / Channel — </dt>
+            <dt className="font-semibold inline">Channel — </dt>
             <dd className="inline text-ink/90">one place things go.</dd>
           </div>
           <div>
-            <dt className="font-semibold inline">Deliverable — </dt>
+            <dt className="font-semibold inline">Piece to make (deliverable) — </dt>
+            <dd className="inline text-ink/90">the asset for one channel.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold inline">Appears N× (touches) — </dt>
+            <dd className="inline text-ink/90">how many times it&apos;s scheduled to post.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold inline">Audience (tier) — </dt>
             <dd className="inline text-ink/90">
-              the asset for one channel.
+              who it&apos;s for, which decides allowed channels.
             </dd>
           </div>
           <div>
-            <dt className="font-semibold inline">Touch — </dt>
-            <dd className="inline text-ink/90">one scheduled appearance.</dd>
-          </div>
-          <div>
-            <dt className="font-semibold inline">Tier — </dt>
+            <dt className="font-semibold inline">Big push (sprint) — </dt>
             <dd className="inline text-ink/90">
-              the audience size, which decides allowed channels.
+              a temporary override of the everyday limits for a big event.
             </dd>
           </div>
           <div>
-            <dt className="font-semibold inline">Sprint — </dt>
-            <dd className="inline text-ink/90">
-              a temporary override of the everyday limits for a big push.
-            </dd>
-          </div>
-          <div>
-            <dt className="font-semibold inline">Guardrail — </dt>
+            <dt className="font-semibold inline">Heads-up (guardrail) — </dt>
             <dd className="inline text-ink/90">an everyday “less is more” limit.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold inline">Sunday Checklist (run sheet) — </dt>
+            <dd className="inline text-ink/90">the printable list for the production team.</dd>
+          </div>
+          <div>
+            <dt className="font-semibold inline">Production (pipeline) — </dt>
+            <dd className="inline text-ink/90">the board of every piece moving through its stages.</dd>
           </div>
         </dl>
       </Card>

@@ -76,8 +76,7 @@ export function evaluatePromoDensity(loads: ChannelWeekLoad[]): Guardrail[] {
       kind: "promo_density",
       severity: "info",
       message:
-        `Busy week on "${load.channelKey}": ${load.touchCount} posts the week of ` +
-        `${load.weekISO} (over the suggested ${load.cap})`,
+        `${load.touchCount} posts scheduled this week — more than the usual ${load.cap}.`,
       whenISO: load.weekISO,
       channelKey: load.channelKey,
     });
