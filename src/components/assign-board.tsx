@@ -22,7 +22,7 @@ function EventChip({ card }: { card: EventCard }) {
 }
 
 function PlacementChip({ p, onRemove }: { p: Placement; onRemove: () => void }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `del:${p.deliverableId}:${p.requestId}` });
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `del:${p.deliverableId}` });
   return (
     <div ref={setNodeRef}
       className={`card-float mb-2 flex items-center justify-between gap-2 p-2.5 text-sm ${isDragging ? "opacity-40" : ""}`}>
@@ -75,9 +75,12 @@ export function AssignBoard({ channels, model }: { channels: AssignChannel[]; mo
       if (over === REMOVE || over === "all") return;
       add(active.slice(4), over);
     } else if (active.startsWith("del:")) {
-      const [, deliverableId, requestId] = active.split(":");
+      const deliverableId = active.slice(4);
       const sourceId = Object.keys(data.byChannel).find((cid) => data.byChannel[cid].some((p) => p.deliverableId === deliverableId));
       if (!sourceId) return;
+      const sourcePlacement = data.byChannel[sourceId].find((p) => p.deliverableId === deliverableId);
+      if (!sourcePlacement) return;
+      const { requestId } = sourcePlacement;
       if (over === REMOVE || over === "all") { remove(sourceId, deliverableId); return; }
       if (over !== sourceId) { add(requestId, over); remove(sourceId, deliverableId); }
     }
