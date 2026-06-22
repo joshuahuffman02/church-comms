@@ -17,6 +17,9 @@ import { AssetAttach, type AssetRow } from "@/components/asset-attach";
 import { PcoUnlinkButton } from "@/components/pco-unlink-button";
 import { MinistryDots } from "@/components/ministry-dots";
 import { ChannelPicker, type PickerPlacement } from "@/components/channel-picker";
+import { FeatureVideoButton } from "@/components/feature-video-button";
+import { comingSunday } from "@/lib/week";
+import { atMidnight } from "@/lib/engine/dates";
 import { getSessionUser } from "@/lib/authz";
 import { effectiveOwnerId } from "@/lib/tasks";
 import { isEditor } from "@/lib/roles";
@@ -180,6 +183,15 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         publishMs: sortedTouches[0]?.scheduledAt.getTime() ?? null,
       };
     });
+
+  // Is this event already on THIS coming Sunday's announcement video?
+  const comingSun = atMidnight(comingSunday(new Date()));
+  const comingSundayLabel = comingSun.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const featuredThisSunday = request.deliverables.some(
+    (d) =>
+      d.channel.key === "announcement_video" &&
+      d.touches.some((t) => atMidnight(t.scheduledAt).getTime() === comingSun.getTime()),
+  );
 
   const assetRows: AssetRow[] = request.assets.map((a) => ({
     id: a.id,
@@ -542,6 +554,15 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
 
       {/* Channel picker — where this event's promo is going */}
       <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
+      {canEdit && (
+        <div className="-mt-2 mb-4 pl-1">
+          <FeatureVideoButton
+            requestId={request.id}
+            sundayLabel={comingSundayLabel}
+            alreadyFeatured={featuredThisSunday}
+          />
+        </div>
+      )}
 
       {/* Deliverables */}
       <DeliverableList rows={rows} users={activeUsers} currentUserId={me?.id ?? ""} canEdit={canEdit} />
