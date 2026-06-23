@@ -60,6 +60,9 @@ export default async function Channels() {
         <Link href="/settings/tag-rules" className="hover:underline">
           🏷️ Tag rules
         </Link>
+        <Link href="/settings/updates" className="hover:underline">
+          ⬆️ Updates
+        </Link>
         <Link href="/guardrails" className="hover:underline">
           🛡️ Guardrails
         </Link>

@@ -46,6 +46,5 @@ RUN npx prisma generate \
 
 EXPOSE 3000
 
-# Apply pending migrations against the mounted DB, then start the server.
-# (migrate deploy is non-interactive and safe for production.)
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+# Prepare the mounted DB, then start the server.
+CMD ["sh", "-c", "npm run db:prepare && npm run start"]

@@ -94,6 +94,8 @@ Optional:
   calendar preview.
 - `ICAL_IMPORT_FILE` - absolute path to a local `.ics` file for manual import.
 - `BACKUP_REMOTE` - optional `rclone` remote for off-box backups.
+- `ENABLE_APP_UPDATER`, `UPDATE_REMOTE`, `UPDATE_BRANCH`, `PM2_APP_NAME`, and
+  `UPDATE_RESTART_CMD` - optional trusted-machine updater controls.
 
 Real `.env` files, SQLite databases, backups, local imports, and instance-only
 files are ignored by git.
@@ -166,6 +168,11 @@ For a live church instance:
 
 Use semver release tags such as `v1.0.0`. Release notes should call out whether
 Prisma migrations are included.
+
+On a trusted always-on local machine, admins can also use `Settings > Updates`
+when `ENABLE_APP_UPDATER=true` is set. The built-in updater checks GitHub,
+backs up the database, fast-forwards the configured branch, installs
+dependencies, prepares Prisma, builds, and restarts the process manager.
 
 ## Keeping A Live Church Instance
 
