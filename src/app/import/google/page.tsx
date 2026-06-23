@@ -2,44 +2,49 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
-import { atMidnight, addDays } from "@/lib/engine/dates";
-import {
-  fetchExternalCalendarEvents,
-  buildExternalEventPreview,
-  type ExistingCalendarEvent,
-} from "@/lib/external-calendar";
-import { googleCalendarConfigured } from "@/lib/google-intake";
+import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
+import { GOOGLE_ICAL_SOURCE } from "@/lib/google-intake";
+import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form";
 import { GoogleImportList, type GoogleImportRow } from "@/components/google-import-list";
+import { GoogleCalendarCheckButton } from "@/components/google-calendar-check-button";
 
 export const dynamic = "force-dynamic";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
 
-function SetupCard() {
+function CalendarFeedCard({
+  currentUrl,
+  configured,
+}: {
+  currentUrl: string | null;
+  configured: boolean;
+}) {
   return (
     <div className="card-float p-6 bg-sky-bg/40">
-      <div className="text-lg font-bold mb-2">Google Calendar isn&apos;t connected yet</div>
+      <div className="text-lg font-bold mb-2">
+        {configured ? "Calendar feed connected" : "Connect a calendar feed"}
+      </div>
       <p className="text-sm text-muted mb-4">
-        Once it&apos;s connected, events on your church Google Calendar appear here automatically as
-        tentative entries — each with a short checklist to turn it into a real, planned event. Connecting
-        is a <b>one-time technical setup</b> — send this page to whoever installed the app if you&apos;re unsure.
+        Paste the calendar&apos;s iCal URL here. Events appear as tentative entries — each with a short
+        checklist to turn it into a real, planned event.
       </p>
+      <ExternalCalendarUrlForm
+        currentUrl={currentUrl}
+        buttonLabel={configured ? "Update URL" : "Connect calendar"}
+        className="mb-4"
+      />
       <details className="rounded-2xl border bg-white px-4 py-3 text-sm">
         <summary className="cursor-pointer font-semibold text-ink select-none">
           Setup details for your tech helper
         </summary>
         <p className="text-muted mt-3">
           In Google Calendar → <i>Settings → Settings for my calendars → Integrate calendar</i>, copy the{" "}
-          <b>Secret address in iCal format</b> (or the public iCal URL), then set it on the server&apos;s{" "}
-          <code className="font-mono">.env</code> and restart:
+          <b>Secret address in iCal format</b> or a public iCal URL.
         </p>
-        <div className="mt-2 rounded-xl border bg-sky-bg/50 px-4 py-3 font-mono text-ink">
-          <div>GOOGLE_CALENDAR_URL=&quot;https://calendar.google.com/.../basic.ics&quot;</div>
-        </div>
         <p className="text-muted mt-2 text-xs">
-          The feed is read-only and refreshes on Google&apos;s schedule (can lag an hour or two) — fine for
-          planning ahead. The scheduled sync then pulls new events in on its own.
+          The feed is read-only and refreshes on Google&apos;s schedule. Existing server <code>GOOGLE_*</code>{" "}
+          environment variables still work as a fallback.
         </p>
       </details>
     </div>
@@ -60,50 +65,78 @@ export default async function GoogleImportPage() {
     );
   }
 
+  const calendar = await activeExternalCalendarConfig();
+
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-extrabold mb-1">Import from Google Calendar 📅</h1>
       <p className="text-muted mb-5">
-        Bring events from your church Google Calendar in as tentative entries. New events also pull in
-        automatically on the scheduled sync — this page is for reviewing or pulling them in now.
+        Review events found on your church Google Calendar. The daily check and
+        Check calendar now button fill this inbox; you still choose what to accept
+        or ignore.
       </p>
-      {!googleCalendarConfigured() ? <SetupCard /> : <Preview />}
+      {!calendar.feedUrl ? (
+        <CalendarFeedCard currentUrl={calendar.sourceUrl} configured={false} />
+      ) : (
+        <>
+          <div className="mb-5">
+            <CalendarFeedCard currentUrl={calendar.sourceUrl} configured />
+          </div>
+          <Preview />
+        </>
+      )}
     </div>
   );
 }
 
 async function Preview() {
-  let rows: GoogleImportRow[];
-  try {
-    const today = atMidnight(new Date());
-    const [events, existing] = await Promise.all([
-      fetchExternalCalendarEvents(),
-      db.request.findMany({
-        where: { eventStart: { gte: addDays(today, -1) } },
-        select: { id: true, title: true, eventStart: true, location: true, pcoEventId: true, externalCalendarKey: true },
-      }),
-    ]);
-    const previews = buildExternalEventPreview(events, existing as ExistingCalendarEvent[]);
-    rows = previews
-      .filter((p) => !p.event.operationalNoise)
-      .map((p) => ({
-        key: p.event.key,
-        title: p.event.title,
-        dateLabel: fmt(p.event.startsAt),
-        status: p.status,
-        location: p.event.location,
-      }));
-  } catch (err) {
+  const candidates = await db.calendarImportCandidate.findMany({
+    where: { status: "pending", source: GOOGLE_ICAL_SOURCE },
+    orderBy: [{ startsAt: "asc" }, { title: "asc" }],
+  });
+  const rows: GoogleImportRow[] = candidates.map((candidate) => ({
+    key: candidate.key,
+    title: candidate.title,
+    dateLabel: fmt(candidate.startsAt),
+    status:
+      candidate.matchConfidence === "exact"
+        ? "already_in_system"
+        : candidate.matchRequestId
+          ? "possible_match"
+          : "missing",
+    location: candidate.location,
+    recommendation: candidate.recommendation as GoogleImportRow["recommendation"],
+    recommendationReason: candidate.recommendationReason,
+    match: candidate.matchRequestId
+      ? {
+          requestId: candidate.matchRequestId,
+          title: candidate.matchTitle ?? "Existing event",
+          dateLabel: candidate.matchDate ? fmt(candidate.matchDate) : "Date not set",
+          reason: candidate.matchReason ?? "Similar title or date",
+          confidence: candidate.matchConfidence as NonNullable<GoogleImportRow["match"]>["confidence"],
+          score: candidate.matchScore ?? null,
+        }
+      : null,
+  }));
+
+  if (rows.length === 0) {
     return (
-      <div className="card-float border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-        Couldn&apos;t reach Google Calendar: {err instanceof Error ? err.message : "unknown error"}. Double-check
-        the calendar URL with your tech helper.
+      <div>
+        <div className="mb-4">
+          <GoogleCalendarCheckButton />
+        </div>
+        <div className="card-float p-5 text-muted text-sm">
+          No calendar events are waiting for review. Use Check calendar now to pull the latest feed into this inbox.
+        </div>
       </div>
     );
   }
-
-  if (rows.length === 0) {
-    return <div className="card-float p-5 text-muted text-sm">No upcoming events on the Google Calendar.</div>;
-  }
-  return <GoogleImportList rows={rows} />;
+  return (
+    <div>
+      <div className="mb-4">
+        <GoogleCalendarCheckButton />
+      </div>
+      <GoogleImportList rows={rows} />
+    </div>
+  );
 }

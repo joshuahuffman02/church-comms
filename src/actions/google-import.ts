@@ -4,14 +4,33 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
-import { fetchExternalCalendarEvents, type ExternalCalendarEvent } from "@/lib/external-calendar";
-import { GOOGLE_ICAL_SOURCE, createGoogleStub } from "@/lib/google-intake";
+import type { CalendarImportCandidate } from "@prisma/client";
+import { GOOGLE_ICAL_SOURCE, createGoogleStub, discoverGoogleCalendarCandidates } from "@/lib/google-intake";
+import type { ExternalCalendarEvent } from "@/lib/external-calendar";
+
+function candidateToEvent(candidate: CalendarImportCandidate): ExternalCalendarEvent {
+  return {
+    uid: candidate.uid,
+    key: candidate.key,
+    title: candidate.title,
+    startsAt: candidate.startsAt,
+    endsAt: candidate.endsAt,
+    dateKey: candidate.dateKey,
+    location: candidate.location,
+    description: candidate.description,
+    source: "single",
+    operationalNoise: candidate.operationalNoise,
+  };
+}
 
 async function selectedGoogleEvents(keys: readonly string[]): Promise<ExternalCalendarEvent[]> {
   const wanted = new Set(keys);
   if (wanted.size === 0) return [];
-  const events = await fetchExternalCalendarEvents();
-  return events.filter((event) => wanted.has(event.key));
+  const candidates = await db.calendarImportCandidate.findMany({
+    where: { source: GOOGLE_ICAL_SOURCE, status: "pending", key: { in: [...wanted] } },
+    orderBy: { startsAt: "asc" },
+  });
+  return candidates.map(candidateToEvent);
 }
 
 function refreshImportSurfaces() {
@@ -19,6 +38,14 @@ function refreshImportSurfaces() {
   revalidatePath("/requests");
   revalidatePath("/calendar");
   revalidatePath("/this-week");
+}
+
+/** Pull the calendar feed into the one-way review inbox without creating Requests. */
+export async function checkGoogleCalendarForEvents() {
+  await requireAdmin();
+  const result = await discoverGoogleCalendarCandidates();
+  refreshImportSurfaces();
+  return result;
 }
 
 /** Manually import the chosen Google Calendar events as stub Requests. */
@@ -42,6 +69,11 @@ export async function importGoogleEvents(keys: string[]): Promise<{ created: num
     );
     created += 1;
   }
+
+  await db.calendarImportCandidate.updateMany({
+    where: { source: GOOGLE_ICAL_SOURCE, key: { in: keys } },
+    data: { status: "accepted" },
+  });
 
   refreshImportSurfaces();
   return { created, skipped: keys.length - created };
@@ -67,6 +99,11 @@ export async function ignoreGoogleEvents(keys: string[]): Promise<{ ignored: num
       },
     });
   }
+
+  await db.calendarImportCandidate.updateMany({
+    where: { source: GOOGLE_ICAL_SOURCE, key: { in: keys } },
+    data: { status: "ignored" },
+  });
 
   refreshImportSurfaces();
   return { ignored: events.length };

@@ -120,7 +120,7 @@ PCO_TOKEN=
 Scheduled sync is protected by `CRON_SECRET`:
 
 ```cron
-*/30 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/sync-events
+0 6 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/sync-events
 ```
 
 See `docs/pco-forms-setup.md` and `docs/pco-event-templates.md` for generic PCO

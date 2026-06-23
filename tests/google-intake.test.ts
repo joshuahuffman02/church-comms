@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { pickNewGoogleEvents, INTAKE_TASKS, GOOGLE_ICAL_SOURCE } from "@/lib/google-intake";
+import {
+  pickNewGoogleEvents,
+  INTAKE_TASKS,
+  GOOGLE_ICAL_SOURCE,
+  recommendGoogleImportCandidate,
+} from "@/lib/google-intake";
 import { computeTaskDueDates } from "@/lib/playbooks";
 import type { ExternalCalendarEvent, ExternalEventPreview } from "@/lib/external-calendar";
 
@@ -47,6 +52,48 @@ describe("pickNewGoogleEvents", () => {
     const a = ev("a");
     expect(pickNewGoogleEvents([a], [prev(a, "possible_match")], new Set(), new Set())).toEqual([]);
     expect(pickNewGoogleEvents([a], [prev(a, "missing")], new Set(), new Set()).map((e) => e.key)).toEqual(["a"]);
+  });
+});
+
+describe("recommendGoogleImportCandidate", () => {
+  it("suggests ignore for operational noise or already-existing events", () => {
+    expect(
+      recommendGoogleImportCandidate(
+        ev("room", { title: "Room Setup", operationalNoise: true }),
+        "missing",
+        { acceptedTitles: new Set(), ignoredTitles: new Set() },
+      ).recommendation,
+    ).toBe("ignore");
+    expect(
+      recommendGoogleImportCandidate(ev("known"), "already_in_system", {
+        acceptedTitles: new Set(),
+        ignoredTitles: new Set(),
+      }).recommendation,
+    ).toBe("ignore");
+  });
+
+  it("uses accepted and ignored title history for suggestions", () => {
+    expect(
+      recommendGoogleImportCandidate(ev("fall", { title: "Fall Kickoff" }), "missing", {
+        acceptedTitles: new Set(["fall kickoff"]),
+        ignoredTitles: new Set(),
+      }).recommendation,
+    ).toBe("accept");
+    expect(
+      recommendGoogleImportCandidate(ev("practice", { title: "Worship Practice" }), "missing", {
+        acceptedTitles: new Set(),
+        ignoredTitles: new Set(["worship practice"]),
+      }).recommendation,
+    ).toBe("ignore");
+  });
+
+  it("keeps possible matches in review instead of auto-accepting", () => {
+    expect(
+      recommendGoogleImportCandidate(ev("maybe"), "possible_match", {
+        acceptedTitles: new Set(["maybe"]),
+        ignoredTitles: new Set(),
+      }).recommendation,
+    ).toBe("review");
   });
 });
 

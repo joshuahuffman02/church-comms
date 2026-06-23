@@ -8,7 +8,7 @@ import { syncGoogleCalendar, type GoogleSyncResult } from "@/lib/google-intake";
 // Scheduled auto-sync endpoint. The middleware (src/proxy.ts) lets `api/cron`
 // through without a user session, so this route guards ITSELF with CRON_SECRET.
 // Drive it from a system crontab, e.g.:
-//   */30 * * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+//   0 6 * * * curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
 //       http://localhost:3000/api/cron/sync-events
 export const dynamic = "force-dynamic";
 
@@ -40,8 +40,8 @@ async function handle(req: NextRequest): Promise<NextResponse> {
     const series = await generateAllSeries();
 
     // Google Calendar intake — independent of PCO and isolated, so a Google
-    // fetch failure can't fail the rest of the sync. Pulls new calendar entries
-    // in as stub events + their ripening checklist.
+    // fetch failure can't fail the rest of the sync. This only refreshes the
+    // review inbox; admins still accept/ignore each calendar event manually.
     let google: GoogleSyncResult | { error: string };
     try {
       google = await syncGoogleCalendar();

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-export type MobileNavItem = { href: string; label: string; icon: string; badge?: "guardrails" };
+export type MobileNavItem = { href: string; label: string; icon: string; badge?: "guardrails" | "calendar" };
 export type MobileNavSection = { heading: string; items: MobileNavItem[] };
 
 /**
@@ -16,11 +16,13 @@ export function MobileNav({
   channels,
   editor,
   guardrailCount,
+  calendarImportCount,
 }: {
   sections: MobileNavSection[];
   channels: { key: string; name: string; color: string }[];
   editor: boolean;
   guardrailCount: number;
+  calendarImportCount: number;
 }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
@@ -101,6 +103,11 @@ export function MobileNav({
                     {i.badge === "guardrails" && guardrailCount > 0 && (
                       <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
                         {guardrailCount}
+                      </span>
+                    )}
+                    {i.badge === "calendar" && calendarImportCount > 0 && (
+                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
+                        {calendarImportCount}
                       </span>
                     )}
                   </Link>

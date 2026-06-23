@@ -1,25 +1,27 @@
 /**
  * Google Calendar intake — the read-only "casual front door".
  *
- * Events on a church Google Calendar flow in as lightweight STUB Requests
- * (status "submitted", no plan), then a dated "New event intake" checklist
- * ripens them: confirm details → create the Planning Center event (a guided
- * human step, since PCO's API is read-only) → set audience/channels → confirm
- * room. Reuses the existing external-calendar fetch/parse, the unique
- * `externalCalendarKey` dedup, and the playbook/EventTask engine.
+ * Events on a church Google Calendar flow into a review inbox first. Staff
+ * manually accept the right ones as lightweight STUB Requests (status
+ * "submitted", no plan), then a dated "New event intake" checklist ripens them:
+ * confirm details → create the Planning Center event (a guided human step,
+ * since PCO's API is read-only) → set audience/channels → confirm room. Reuses
+ * the existing external-calendar fetch/parse, the unique `externalCalendarKey`
+ * dedup, and the playbook/EventTask engine.
  *
  * No "use server" — these are plain server-side helpers so the cron route (which
  * has no user session) can call them directly, alongside the admin-guarded
  * actions in `src/actions/google-import.ts`.
  */
 import { db } from "@/lib/db";
+import { activeExternalCalendarUrl } from "@/lib/calendar-settings";
 import { atMidnight } from "@/lib/engine/dates";
 import { computeTaskDueDates } from "@/lib/playbooks";
 import {
-  configuredExternalCalendarUrl,
   fetchExternalCalendarEvents,
   buildExternalEventPreview,
   type ExternalCalendarEvent,
+  type ExternalEventMatch,
   type ExternalEventPreview,
 } from "@/lib/external-calendar";
 
@@ -32,9 +34,9 @@ export const INTAKE_TEMPLATE_NAME = "New event intake";
 /** Where to create the real event (PCO Calendar) — surfaced in the to-do. */
 const PCO_CALENDAR_URL = "https://calendar.planningcenteronline.com";
 
-/** True when a Google calendar feed is configured (any of the GOOGLE_* envs). */
-export function googleCalendarConfigured(): boolean {
-  return !!configuredExternalCalendarUrl();
+/** True when a calendar feed is configured in settings or via GOOGLE_* envs. */
+export async function googleCalendarConfigured(): Promise<boolean> {
+  return !!(await activeExternalCalendarUrl());
 }
 
 // ── The ripening checklist (Phases 3 + 4) ───────────────────────────────────
@@ -205,37 +207,119 @@ export function pickNewGoogleEvents(
   );
 }
 
+export type CalendarImportRecommendation = {
+  recommendation: "accept" | "ignore" | "review";
+  reason: string;
+};
+
+function normalizeHistoryTitle(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+async function pruneStaleGoogleCandidates(activeKeys: ReadonlySet<string>): Promise<void> {
+  const pending = await db.calendarImportCandidate.findMany({
+    where: { source: GOOGLE_ICAL_SOURCE, status: "pending" },
+    select: { id: true, key: true },
+  });
+  const staleIds = pending
+    .filter((candidate) => !activeKeys.has(candidate.key))
+    .map((candidate) => candidate.id);
+
+  const chunkSize = 500;
+  for (let i = 0; i < staleIds.length; i += chunkSize) {
+    await db.calendarImportCandidate.deleteMany({
+      where: { id: { in: staleIds.slice(i, i + chunkSize) } },
+    });
+  }
+}
+
+export function recommendGoogleImportCandidate(
+  event: ExternalCalendarEvent,
+  status: ExternalEventPreview["status"],
+  history: {
+    acceptedTitles: ReadonlySet<string>;
+    ignoredTitles: ReadonlySet<string>;
+  },
+  match?: ExternalEventMatch | null,
+): CalendarImportRecommendation {
+  const title = normalizeHistoryTitle(event.title);
+
+  if (status === "already_in_system") {
+    return {
+      recommendation: "ignore",
+      reason: match
+        ? `Looks like this is already in Church Comms as "${match.title}" (${match.reason}).`
+        : "Looks like this event is already in Church Comms.",
+    };
+  }
+  if (event.operationalNoise) {
+    return { recommendation: "ignore", reason: "Looks like room/admin noise instead of a promoted event." };
+  }
+  if (history.ignoredTitles.has(title)) {
+    return { recommendation: "ignore", reason: "Similar calendar items have been ignored before." };
+  }
+  if (status === "possible_match") {
+    return {
+      recommendation: "review",
+      reason: match
+        ? `Possible duplicate of "${match.title}" (${match.reason}).`
+        : "It may already exist under a similar title or date.",
+    };
+  }
+  if (history.acceptedTitles.has(title)) {
+    return { recommendation: "accept", reason: "Similar calendar items have been accepted before." };
+  }
+  return { recommendation: "accept", reason: "New calendar event with no close match in Church Comms." };
+}
+
 export type GoogleSyncResult = {
   configured: boolean;
-  created: number;
-  skipped: number;
+  checked: number;
+  pending: number;
+  suggestedAccept: number;
+  suggestedIgnore: number;
+  suggestedReview: number;
 };
 
 /**
- * Scheduled auto-pull (cron): bring in new Google events as stub Requests +
- * ripening checklists. Idempotent — re-running only adds events that aren't
- * already imported/ignored/tracked. Throws only on a fetch failure (the cron
- * route catches it).
+ * One-way calendar discovery: fetch the feed and refresh the review inbox.
+ * It does NOT create, update, or delete Requests. Staff still accept/ignore on
+ * /import/google. Throws only on a fetch failure (the cron route catches it).
  */
-export async function syncGoogleCalendar(): Promise<GoogleSyncResult> {
-  if (!googleCalendarConfigured()) return { configured: false, created: 0, skipped: 0 };
+export async function discoverGoogleCalendarCandidates(): Promise<GoogleSyncResult> {
+  const calendarUrl = await activeExternalCalendarUrl();
+  if (!calendarUrl) {
+    return { configured: false, checked: 0, pending: 0, suggestedAccept: 0, suggestedIgnore: 0, suggestedReview: 0 };
+  }
 
-  const events = await fetchExternalCalendarEvents();
-  if (events.length === 0) return { configured: true, created: 0, skipped: 0 };
-
-  const [existing, ignored] = await Promise.all([
+  const events = await fetchExternalCalendarEvents(calendarUrl);
+  const activeKeys = new Set(events.map((event) => event.key));
+  const [existing, ignored, acceptedHistory, ignoredHistory] = await Promise.all([
     db.request.findMany({
       where: {
         OR: [
-          { externalCalendarKey: { in: events.map((e) => e.key) } },
+          { externalCalendarSource: GOOGLE_ICAL_SOURCE },
           { eventStart: { gte: atMidnight(new Date()) } },
         ],
       },
       select: { id: true, title: true, eventStart: true, location: true, pcoEventId: true, externalCalendarKey: true },
     }),
     db.externalCalendarIgnore.findMany({
-      where: { source: GOOGLE_ICAL_SOURCE, key: { in: events.map((e) => e.key) } },
-      select: { key: true },
+      where: { source: GOOGLE_ICAL_SOURCE },
+      select: { key: true, title: true },
+    }),
+    db.request.findMany({
+      where: { externalCalendarSource: GOOGLE_ICAL_SOURCE },
+      select: { title: true },
+      distinct: ["title"],
+    }),
+    db.externalCalendarIgnore.findMany({
+      where: { source: GOOGLE_ICAL_SOURCE },
+      select: { title: true },
     }),
   ]);
 
@@ -244,12 +328,80 @@ export async function syncGoogleCalendar(): Promise<GoogleSyncResult> {
   );
   const ignoredKeys = new Set(ignored.map((r) => r.key));
   const previews = buildExternalEventPreview(events, existing);
+  const previewByKey = new Map(previews.map((preview) => [preview.event.key, preview]));
+  const history = {
+    acceptedTitles: new Set(acceptedHistory.map((row) => normalizeHistoryTitle(row.title))),
+    ignoredTitles: new Set(ignoredHistory.map((row) => normalizeHistoryTitle(row.title))),
+  };
 
-  const fresh = pickNewGoogleEvents(events, previews, existingKeys, ignoredKeys);
-  let created = 0;
-  for (const event of fresh) {
-    const id = await createGoogleStub(event);
-    if (id) created += 1;
+  await pruneStaleGoogleCandidates(activeKeys);
+
+  for (const event of events) {
+    if (existingKeys.has(event.key) || ignoredKeys.has(event.key)) continue;
+
+    const preview = previewByKey.get(event.key);
+    const status = preview?.status ?? "missing";
+    const match = preview?.matches[0] ?? null;
+    const suggestion = recommendGoogleImportCandidate(event, status, history, match);
+    const matchData = {
+      matchRequestId: match?.id ?? null,
+      matchTitle: match?.title ?? null,
+      matchDate: match?.eventStart ? atMidnight(match.eventStart) : null,
+      matchReason: match?.reason ?? null,
+      matchConfidence: match?.confidence ?? null,
+      matchScore: match?.titleScore ?? null,
+    };
+
+    await db.calendarImportCandidate.upsert({
+      where: { source_key: { source: GOOGLE_ICAL_SOURCE, key: event.key } },
+      update: {
+        uid: event.uid,
+        dateKey: event.dateKey,
+        title: event.title,
+        startsAt: atMidnight(event.startsAt),
+        endsAt: event.endsAt ? atMidnight(event.endsAt) : null,
+        location: event.location,
+        description: event.description,
+        operationalNoise: event.operationalNoise,
+        status: "pending",
+        recommendation: suggestion.recommendation,
+        recommendationReason: suggestion.reason,
+        ...matchData,
+      },
+      create: {
+        source: GOOGLE_ICAL_SOURCE,
+        key: event.key,
+        uid: event.uid,
+        dateKey: event.dateKey,
+        title: event.title,
+        startsAt: atMidnight(event.startsAt),
+        endsAt: event.endsAt ? atMidnight(event.endsAt) : null,
+        location: event.location,
+        description: event.description,
+        operationalNoise: event.operationalNoise,
+        recommendation: suggestion.recommendation,
+        recommendationReason: suggestion.reason,
+        ...matchData,
+      },
+    });
   }
-  return { configured: true, created, skipped: events.length - created };
+
+  const pending = await db.calendarImportCandidate.groupBy({
+    by: ["recommendation"],
+    where: { source: GOOGLE_ICAL_SOURCE, status: "pending" },
+    _count: { _all: true },
+  });
+  const count = (recommendation: string) =>
+    pending.find((row) => row.recommendation === recommendation)?._count._all ?? 0;
+
+  return {
+    configured: true,
+    checked: events.length,
+    pending: pending.reduce((sum, row) => sum + row._count._all, 0),
+    suggestedAccept: count("accept"),
+    suggestedIgnore: count("ignore"),
+    suggestedReview: count("review"),
+  };
 }
+
+export const syncGoogleCalendar = discoverGoogleCalendarCandidates;

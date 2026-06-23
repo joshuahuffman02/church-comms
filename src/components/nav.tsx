@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { getGuardrails } from "@/lib/guardrails-service";
 import { isAdmin, isEditor } from "@/lib/roles";
+import { GOOGLE_ICAL_SOURCE } from "@/lib/google-intake";
 import { NavLink } from "@/components/nav-link";
 import { MobileNav } from "@/components/mobile-nav";
 
@@ -13,7 +14,7 @@ type Item = {
   adminOnly?: boolean;
   editorOnly?: boolean;
   exact?: boolean;
-  badge?: "guardrails";
+  badge?: "guardrails" | "calendar";
 };
 type Section = { heading: string; items: Item[] };
 
@@ -54,7 +55,7 @@ const SECTIONS: Section[] = [
     heading: "Setup",
     items: [
       { href: "/import/planning-center", label: "Import from Planning Center", icon: "🗓️", adminOnly: true },
-      { href: "/import/google", label: "Import from Google", icon: "📆", adminOnly: true },
+      { href: "/import/google", label: "Import from Google", icon: "📆", adminOnly: true, badge: "calendar" },
       { href: "/import/ical", label: "Import a calendar (.ics)", icon: "📥", adminOnly: true },
       { href: "/settings", label: "Settings", icon: "⚙️", adminOnly: true },
       { href: "/help", label: "Help & how-to", icon: "📖", exact: true },
@@ -66,7 +67,7 @@ const sectionHeading =
   "mt-4 px-3 pb-1 pt-3 text-[11px] font-extrabold uppercase text-muted border-t border-slate-100";
 
 export async function Nav() {
-  const [user, channels, guardrails] = await Promise.all([
+  const [user, channels, guardrails, calendarImportCount] = await Promise.all([
     getSessionUser(),
     db.channel.findMany({
       where: { active: true },
@@ -74,6 +75,9 @@ export async function Nav() {
       select: { key: true, name: true, color: true },
     }),
     getGuardrails(new Date()),
+    db.calendarImportCandidate.count({
+      where: { source: GOOGLE_ICAL_SOURCE, status: "pending" },
+    }),
   ]);
   if (!user) return null;
   const admin = isAdmin(user.roles);
@@ -102,6 +106,11 @@ export async function Nav() {
           {guardrailCount}
         </span>
       )}
+      {i.badge === "calendar" && calendarImportCount > 0 && (
+        <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
+          {calendarImportCount}
+        </span>
+      )}
     </NavLink>
   );
 
@@ -113,6 +122,7 @@ export async function Nav() {
         channels={channels}
         editor={editor}
         guardrailCount={guardrailCount}
+        calendarImportCount={calendarImportCount}
       />
 
       {/* Desktop sidebar. grid-cols-1 (a minmax(0,1fr) column) clamps every row

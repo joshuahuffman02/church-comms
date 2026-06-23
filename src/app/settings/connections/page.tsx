@@ -2,10 +2,11 @@ import Link from "next/link";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { pcoConfigured } from "@/lib/pco";
-import { googleCalendarConfigured } from "@/lib/google-intake";
+import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
 import { AdminOnlyCard } from "@/components/admin-only-card";
 import { SettingsNav } from "@/components/settings-nav";
 import { PcoTestButton } from "@/components/pco-test-button";
+import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +29,8 @@ export default async function ConnectionsSettings() {
   }
 
   const pco = pcoConfigured();
-  const google = googleCalendarConfigured();
+  const calendar = await activeExternalCalendarConfig();
+  const google = !!calendar.feedUrl;
   const email = !!process.env.SMTP_HOST;
   const ical = !!process.env.ICAL_IMPORT_FILE;
 
@@ -38,9 +40,8 @@ export default async function ConnectionsSettings() {
       <h1 className="text-2xl font-extrabold mb-1">Connections 🔌</h1>
       <p className="text-muted mb-6">
         How this app links to your other tools. Connecting each one is a one-time
-        technical setup — for security, credentials live on the server, not in the
-        app. If something here says &ldquo;not connected,&rdquo; send this page to
-        whoever installed the app.
+        setup. Passwords and API credentials still live on the server, but a
+        read-only calendar feed URL can be pasted here.
       </p>
 
       {/* Planning Center */}
@@ -101,6 +102,9 @@ export default async function ConnectionsSettings() {
           Pulls events from your church Google Calendar in as tentative entries, each with a setup
           checklist (read-only — a casual front door, not the source of truth).
         </p>
+        <div className="mt-4">
+          <ExternalCalendarUrlForm currentUrl={calendar.sourceUrl} buttonLabel={google ? "Update URL" : "Connect calendar"} />
+        </div>
         <div className="mt-3">
           <Link href="/import/google" className="text-sm font-semibold text-sky-600 hover:underline">
             Go to import →
@@ -112,7 +116,7 @@ export default async function ConnectionsSettings() {
           </summary>
           <p className="text-muted mt-2">
             In Google Calendar → Settings → Integrate calendar, copy the <b>Secret iCal address</b>, then
-            set it on the server&apos;s <code className="font-mono">.env</code> and restart:
+            paste it above. Existing server <code className="font-mono">GOOGLE_*</code> settings still work:
           </p>
           <div className="mt-2 rounded-xl border bg-white px-4 py-3 font-mono text-ink">
             <div>GOOGLE_CALENDAR_URL=&quot;https://calendar.google.com/.../basic.ics&quot;</div>

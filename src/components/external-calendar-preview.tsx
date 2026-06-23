@@ -49,9 +49,8 @@ export function ExternalCalendarPreview({
         <div className="card-float border border-sky-200 bg-sky-bg/40 p-5">
           <div className="font-bold text-ink mb-1">External calendar not configured</div>
           <p className="text-sm text-muted">
-            Set <code className="font-mono">GOOGLE_EVENTS_ICAL_URL</code> or{" "}
-            <code className="font-mono">GOOGLE_EVENTS_CALENDAR_URL</code> to compare
-            another calendar against events already in this app.
+            Paste an iCal URL on the Google Calendar import page to compare another
+            calendar against events already in this app.
           </p>
         </div>
       ) : errorMessage ? (

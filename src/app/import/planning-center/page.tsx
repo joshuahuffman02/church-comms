@@ -3,10 +3,9 @@ import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { db } from "@/lib/db";
 import { pcoConfigured, fetchUpcomingPcoEvents } from "@/lib/pco";
+import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
 import {
   buildExternalEventPreview,
-  configuredExternalCalendarSourceUrl,
-  configuredExternalCalendarUrl,
   fetchExternalCalendarEvents,
   type ExternalEventPreview,
 } from "@/lib/external-calendar";
@@ -128,8 +127,9 @@ async function loadExternalCalendarPreview(): Promise<{
   calendarUrl: string | null;
   errorMessage: string | null;
 }> {
-  const calendarUrl = configuredExternalCalendarUrl();
-  const sourceUrl = configuredExternalCalendarSourceUrl();
+  const calendar = await activeExternalCalendarConfig();
+  const calendarUrl = calendar.feedUrl;
+  const sourceUrl = calendar.sourceUrl;
   const today = atMidnight(new Date());
   const horizon = addDays(today, 180);
 
