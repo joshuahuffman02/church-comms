@@ -2,8 +2,15 @@
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
+import { parseChannelUpdate } from "@/lib/channel-form";
 
 const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot"]);
+
+export interface ChannelActionState {
+  ok: boolean;
+  error?: string;
+  savedAt?: number;
+}
 
 /** lowercase + non-alphanumerics → "_", trimmed of leading/trailing "_". */
 function slugify(name: string): string {
@@ -27,47 +34,33 @@ async function uniqueKey(base: string): Promise<string> {
 }
 
 /**
- * Edit an existing channel's timings + active flag. Auth-guarded.
- * (Labels in the UI: "Goes out" = offset, "Asset due" = lead.)
- *
- * `productionNotes` is the channel's free-text production reference (e.g.
- * banner dimensions + lessons learned). It is only written when the form
- * actually carries the field, so the timings form (which omits it) doesn't
- * clobber an existing note; an empty submission clears it to null.
+ * Edit an existing channel. Used via React `useActionState`, so the signature is
+ * `(prevState, formData)` and it RETURNS a result the row can confirm / surface.
+ * All field parsing lives in the pure `parseChannelUpdate` (unit-tested); fields
+ * whose controls aren't rendered for the channel's type are omitted, never
+ * clobbered. Auth-guarded.
  */
-export async function updateChannel(fd: FormData) {
+export async function updateChannel(
+  _prev: ChannelActionState,
+  fd: FormData,
+): Promise<ChannelActionState> {
   await requireAdmin();
 
-  const notesRaw = fd.get("productionNotes");
-  const hasNotes = typeof notesRaw === "string";
-  const productionNotes = hasNotes
-    ? notesRaw.trim().slice(0, 4000) || null
-    : undefined;
+  const id = String(fd.get("id") ?? "");
+  if (!id) return { ok: false, error: "Missing channel id." };
 
-  // Weekly cap (windowed channels): blank clears it to null (uncapped); a
-  // non-positive or non-numeric value also clears, so the field can never store
-  // a nonsense cap. Only written when the form actually carries `cap`.
-  const capRaw = fd.get("cap");
-  const hasCap = typeof capRaw === "string";
-  const capNum = hasCap ? Math.floor(Number(capRaw)) : NaN;
-  const frequencyCap = hasCap
-    ? capRaw.trim() === "" || !Number.isFinite(capNum) || capNum <= 0
-      ? null
-      : capNum
-    : undefined;
+  const parsed = parseChannelUpdate(fd);
+  if (!parsed.ok) return { ok: false, error: parsed.error };
 
-  await db.channel.update({
-    where: { id: String(fd.get("id")) },
-    data: {
-      defaultPublishOffsetDays: Number(fd.get("offset")),
-      productionLeadDays: Number(fd.get("lead")),
-      active: fd.get("active") === "on",
-      ...(hasNotes ? { productionNotes } : {}),
-      ...(hasCap ? { frequencyCap } : {}),
-    },
-  });
+  try {
+    await db.channel.update({ where: { id }, data: parsed.data });
+  } catch {
+    return { ok: false, error: "Couldn’t save — that channel may no longer exist." };
+  }
+
   revalidatePath("/settings/channels");
   revalidatePath("/outputs");
+  return { ok: true, savedAt: Date.now() };
 }
 
 /**
