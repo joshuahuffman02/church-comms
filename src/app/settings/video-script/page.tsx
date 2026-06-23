@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { db } from "@/lib/db";
+import { SettingsNav } from "@/components/settings-nav";
 import {
   DEFAULT_VIDEO_SCRIPT_INTRO,
   DEFAULT_VIDEO_SCRIPT_OUTRO,
@@ -29,10 +30,11 @@ export default async function VideoScriptSettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-extrabold mb-1">Announcement Video Script 🎬</h1>
+      <SettingsNav />
+      <h1 className="text-2xl font-extrabold mb-1">Announcement video script 🎬</h1>
       <p className="text-muted mb-5">
         Your <b>intro</b> and <b>outro</b> wrap the week&apos;s auto-filled top-3 items. Leave a box
-        blank to use the built-in default. Edit, then grab the finished script on the Exports page.
+        blank to use the built-in default. Edit, then grab the finished script on the Downloads page.
       </p>
 
       <form action={saveVideoScriptTemplates} className="card-float p-6 grid gap-4">

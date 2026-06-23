@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
@@ -9,13 +8,14 @@ import {
 } from "@/actions/approval-rules";
 import { APPROVAL_CONDITION_TYPES } from "@/lib/approval-conditions";
 import { AdminOnlyCard } from "@/components/admin-only-card";
+import { SettingsNav } from "@/components/settings-nav";
 
 const CONDITION_LABEL: Record<string, string> = {
-  tier1: "Tier 1 (church-wide)",
-  channel: "On a specific channel",
-  stage: "Has a stage announcement",
-  all_church_email: "All-church email (tier 1 + email)",
-  sensitive: "Flagged sensitive",
+  tier1: "It's for the whole church",
+  channel: "It's on a specific channel",
+  stage: "It has a stage announcement",
+  all_church_email: "It's an all-church email",
+  sensitive: "It's flagged sensitive",
 };
 
 export default async function ApprovalsSettings({
@@ -39,11 +39,11 @@ export default async function ApprovalsSettings({
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-1">Approval routing ✅</h1>
+      <SettingsNav />
+      <h1 className="text-2xl font-extrabold mb-1">Approvals ✅</h1>
       <p className="text-muted mb-5">
-        Route requests for sign-off before they’re approved. Rules ship{" "}
-        <b>inactive</b> by default — with none active, approval is dormant and
-        nothing changes.
+        Require a sign-off before certain events are approved. Rules ship{" "}
+        <b>off</b> by default — with none active, nothing changes.
       </p>
 
       {/* Add a rule */}
@@ -51,8 +51,8 @@ export default async function ApprovalsSettings({
         <h2 className="font-bold mb-3">Add a rule</h2>
         {error && (
           <div className="mb-3 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm text-rose-700">
-            Please give the rule a name, pick a condition, and (for the channel
-            condition) a channel key.
+            Please give the rule a name, pick when it applies, and (for the
+            specific-channel rule) a channel.
           </div>
         )}
         <form action={createApprovalRule} className="grid gap-3">
@@ -82,20 +82,19 @@ export default async function ApprovalsSettings({
               </select>
             </label>
             <label className="text-sm text-muted grid gap-1">
-              Channel key (channel condition only)
-              <input
+              Channel (for the “specific channel” rule)
+              <select
                 name="conditionValue"
-                list="approval-channel-keys"
-                placeholder="e.g. dedicated_email"
+                defaultValue=""
                 className="rounded-2xl border px-3 py-2 text-sm text-ink w-52"
-              />
-              <datalist id="approval-channel-keys">
+              >
+                <option value="">— pick a channel —</option>
                 {channels.map((c) => (
                   <option key={c.id} value={c.key}>
                     {c.name}
                   </option>
                 ))}
-              </datalist>
+              </select>
             </label>
           </div>
           <div className="flex flex-wrap items-end gap-3">
@@ -177,15 +176,6 @@ export default async function ApprovalsSettings({
             </div>
           );
         })}
-      </div>
-
-      <div className="mt-5">
-        <Link
-          href="/settings/channels"
-          className="text-sm font-semibold text-muted hover:underline"
-        >
-          ← Back to settings
-        </Link>
       </div>
     </div>
   );

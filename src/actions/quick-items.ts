@@ -178,6 +178,7 @@ export async function attachChannel(requestId: string, fd: FormData) {
   revalidatePath("/outputs");
   revalidatePath(`/outputs/${channel.key}`);
   revalidatePath("/this-week");
+  revalidatePath("/assign");
 }
 
 /** A neutral purpose label for manually attached touches. */

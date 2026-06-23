@@ -33,6 +33,8 @@ export type ExternalEventMatch = {
   pcoEventId: string | null;
   titleScore: number;
   dateDistanceDays: number;
+  confidence: "exact" | "strong" | "possible";
+  reason: string;
 };
 
 export type ExternalEventPreview = {
@@ -57,7 +59,7 @@ export function configuredLocalIcalPath(): string | null {
 }
 
 export function calendarUrlToIcsUrl(input: string): string {
-  const trimmed = input.trim();
+  const trimmed = input.trim().replace(/^webcal:\/\//i, "https://");
   try {
     const url = new URL(trimmed);
     const src = url.searchParams.get("src");
@@ -204,16 +206,12 @@ export function buildExternalEventPreview(
   return externalEvents
     .filter((event) => event.dateKey >= startKey && event.dateKey <= endKey)
     .map((event) => {
-      const hasExternalKey = existingEvents.some((existing) => existing.externalCalendarKey === event.key);
       const scored = existingEvents
         .map((existing) => scoreExistingMatch(event, existing))
-        .filter(
-          (match) =>
-            (match.dateDistanceDays === 0 && match.titleScore >= 0.2) ||
-            (match.dateDistanceDays <= 1 && match.titleScore >= 0.45) ||
-            (match.dateDistanceDays <= 7 && match.titleScore >= 0.75),
-        )
+        .filter((match): match is ExternalEventMatch => match !== null)
         .sort((a, b) => {
+          const confidence = confidenceRank(b.confidence) - confidenceRank(a.confidence);
+          if (confidence !== 0) return confidence;
           if (a.dateDistanceDays !== b.dateDistanceDays) {
             return a.dateDistanceDays - b.dateDistanceDays;
           }
@@ -221,9 +219,7 @@ export function buildExternalEventPreview(
         })
         .slice(0, 3);
 
-      const exact = hasExternalKey || scored.some(
-        (match) => match.dateDistanceDays === 0 && match.titleScore >= 0.5,
-      );
+      const exact = scored.some((match) => match.confidence === "exact");
 
       return {
         event,
@@ -531,11 +527,21 @@ function monthsBetween(a: Date, b: Date): number {
 function scoreExistingMatch(
   event: ExternalCalendarEvent,
   existing: ExistingCalendarEvent,
-): ExternalEventMatch {
+): ExternalEventMatch | null {
   const titleScore = titleSimilarity(event.title, existing.title);
   const dateDistanceDays = Math.abs(
     daysBetweenDateKeys(event.dateKey, localDateKey(existing.eventStart)),
   );
+  const sameExternalKey = !!existing.externalCalendarKey && existing.externalCalendarKey === event.key;
+  const locationScore = locationSimilarity(event.location, existing.location);
+  const reason = matchReason({
+    sameExternalKey,
+    titleScore,
+    dateDistanceDays,
+    locationScore,
+  });
+  if (!reason) return null;
+
   return {
     id: existing.id,
     title: existing.title,
@@ -544,6 +550,8 @@ function scoreExistingMatch(
     pcoEventId: existing.pcoEventId,
     titleScore,
     dateDistanceDays,
+    confidence: reason.confidence,
+    reason: reason.text,
   };
 }
 
@@ -552,24 +560,157 @@ function titleSimilarity(a: string, b: string): number {
   const nb = normalizeTitle(b);
   if (!na || !nb) return 0;
   if (na === nb) return 1;
+  const aTokens = matchTokens(na);
+  const bTokens = matchTokens(nb);
+  const sharedSignal = hasSharedSignalToken(aTokens, bTokens);
+  const shorter = na.length <= nb.length ? na : nb;
+  const longer = na.length <= nb.length ? nb : na;
+  const strongContainment =
+    shorter.length >= 8 &&
+    longer.includes(shorter) &&
+    sharedSignal;
+  if (strongContainment) return 0.92;
 
-  const aTokens = new Set(na.split(" "));
-  const bTokens = new Set(nb.split(" "));
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
   let intersection = 0;
-  for (const token of aTokens) {
-    if (bTokens.has(token)) intersection += 1;
+  for (const token of aSet) {
+    if (bSet.has(token)) intersection += 1;
   }
-  const union = new Set([...aTokens, ...bTokens]).size;
-  return union === 0 ? 0 : intersection / union;
+  if (intersection === 0 || !sharedSignal) return 0;
+
+  const union = new Set([...aSet, ...bSet]).size;
+  const jaccard = union === 0 ? 0 : intersection / union;
+  const smallerTokenCount = Math.min(aSet.size, bSet.size);
+  const overlap = smallerTokenCount >= 2 ? (intersection / smallerTokenCount) * 0.86 : 0;
+  return Math.max(jaccard, overlap);
 }
 
 function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
     .replace(/&/g, " and ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b[\w.+-]+@[\w.-]+\.\w+\b/g, " ")
+    .replace(/\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+const matchStopWords = new Set([
+  "a",
+  "an",
+  "and",
+  "at",
+  "by",
+  "for",
+  "from",
+  "in",
+  "is",
+  "of",
+  "on",
+  "or",
+  "the",
+  "to",
+  "with",
+  "your",
+  "room",
+  "rooms",
+  "main",
+  "foyer",
+  "hall",
+  "gym",
+  "chapel",
+  "cafe",
+  "lakeside",
+  "lake",
+  "side",
+  "mc",
+  "smc",
+  "btz",
+]);
+
+const lowSignalMatchWords = new Set([
+  "bible",
+  "study",
+  "class",
+  "church",
+  "group",
+  "meeting",
+  "men",
+  "mens",
+  "ministry",
+  "ministries",
+  "missionary",
+  "month",
+  "rise",
+  "senior",
+  "seniors",
+  "lights",
+  "service",
+  "team",
+  "thrive",
+  "youth",
+]);
+
+function matchTokens(normalizedTitle: string): string[] {
+  return normalizedTitle
+    .split(" ")
+    .filter((token) => token.length > 0 && !matchStopWords.has(token));
+}
+
+function hasSharedSignalToken(aTokens: string[], bTokens: string[]): boolean {
+  const b = new Set(bTokens);
+  return aTokens.some(
+    (token) => token.length > 2 && !lowSignalMatchWords.has(token) && b.has(token),
+  );
+}
+
+function locationSimilarity(a: string | null, b: string | null): number {
+  if (!a || !b) return 0;
+  return titleSimilarity(a, b);
+}
+
+function confidenceRank(confidence: ExternalEventMatch["confidence"]): number {
+  if (confidence === "exact") return 3;
+  if (confidence === "strong") return 2;
+  return 1;
+}
+
+function matchReason({
+  sameExternalKey,
+  titleScore,
+  dateDistanceDays,
+  locationScore,
+}: {
+  sameExternalKey: boolean;
+  titleScore: number;
+  dateDistanceDays: number;
+  locationScore: number;
+}): { confidence: ExternalEventMatch["confidence"]; text: string } | null {
+  if (sameExternalKey) {
+    return { confidence: "exact", text: "same calendar occurrence key" };
+  }
+  if (dateDistanceDays === 0 && titleScore >= 0.96) {
+    return { confidence: "exact", text: "same date with a near-identical title" };
+  }
+  if (dateDistanceDays === 0 && titleScore >= 0.55) {
+    return { confidence: "strong", text: "same date with a very similar title" };
+  }
+  if (dateDistanceDays === 0 && titleScore >= 0.35) {
+    return { confidence: "possible", text: "same date with a similar title" };
+  }
+  if (dateDistanceDays === 0 && titleScore >= 0.25 && locationScore >= 0.8) {
+    return { confidence: "possible", text: "same date, similar title, and matching location" };
+  }
+  if (dateDistanceDays <= 1 && titleScore >= 0.58) {
+    return { confidence: "possible", text: "within one day with a similar title" };
+  }
+  if (dateDistanceDays <= 3 && titleScore >= 0.82) {
+    return { confidence: "possible", text: "within three days with a very similar title" };
+  }
+  return null;
 }
 
 export function isOperationalNoise(title: string, location: string | null): boolean {

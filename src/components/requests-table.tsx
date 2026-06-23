@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { REQUEST_STATUS_META } from "@/lib/status";
 import { cancelEvent } from "@/actions/events";
 import { MinistryDots, type MinistryDot } from "@/components/ministry-dots";
+import { tierLabel, tierTitle } from "@/lib/labels";
 
 export type RequestRow = {
   id: string;
@@ -59,8 +60,11 @@ function StatusChip({ status }: { status: string }) {
 
 function TierBadge({ tier }: { tier: number }) {
   return (
-    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted">
-      Tier {tier}
+    <span
+      title={tierTitle(tier)}
+      className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted"
+    >
+      {tierLabel(tier)}
     </span>
   );
 }
@@ -216,7 +220,7 @@ export function RequestsTable({
             <option value="all">All</option>
             {tiers.map((t) => (
               <option key={t} value={String(t)}>
-                Tier {t}
+                {tierLabel(t)}
               </option>
             ))}
           </select>
@@ -265,7 +269,26 @@ export function RequestsTable({
           <div>Next make-by</div>
           <div></div>
         </div>
-        {filtered.length === 0 && (
+        {filtered.length === 0 && rows.length === 0 && (
+          <div className="px-5 py-8 text-center text-sm">
+            <p className="font-semibold text-ink">No events yet</p>
+            <p className="text-muted mt-1">Events show up here once you add or import them.</p>
+            {canEdit && (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Link href="/requests/new" className="btn-primary rounded-full px-4 py-2 text-sm font-semibold">
+                  ➕ Add your first event
+                </Link>
+                <Link
+                  href="/import/planning-center"
+                  className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-sky-bg"
+                >
+                  Import from Planning Center
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+        {filtered.length === 0 && rows.length > 0 && (
           <div className="px-5 py-6 text-muted text-sm">No events match your search.</div>
         )}
         {filtered.map((r) => (

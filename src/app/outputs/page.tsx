@@ -60,9 +60,9 @@ export default async function OutputsIndex() {
 
   return (
     <div className="max-w-5xl">
-      <h1 className="text-2xl font-extrabold mb-1">Outputs 📡</h1>
+      <h1 className="text-2xl font-extrabold mb-1">Channels 📡</h1>
       <p className="text-muted mb-5">
-        Every communication channel · this week and the next few months
+        Everywhere you post · this week and the next few months
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">

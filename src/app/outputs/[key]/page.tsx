@@ -11,6 +11,9 @@ import {
 import { TouchRemoveButton } from "@/components/touch-remove-button";
 import { TouchContentEditor } from "@/components/touch-content-editor";
 import { MinistryDots } from "@/components/ministry-dots";
+import { phaseLabel } from "@/lib/labels";
+import { comingSunday } from "@/lib/week";
+import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -47,6 +50,7 @@ function TouchRow({
 }) {
   const req = t.deliverable.request;
   const ministries = req.ministries.map((m) => ({ name: m.name, color: m.color }));
+  const phase = phaseLabel(t.purposeLabel);
   return (
     <div className={`py-2.5 border-t border-slate-100 ${muted ? "opacity-80" : ""}`}>
       <div className="flex items-center justify-between gap-3 text-sm">
@@ -54,13 +58,14 @@ function TouchRow({
           <Link href={`/requests/${req.id}`} className="font-semibold hover:underline">
             {req.title}
           </Link>
-          <div className="text-muted flex items-center gap-2 mt-0.5">
-            <MinistryDots ministries={ministries} showNames />
-            {t.purposeLabel && <span>· {t.purposeLabel}</span>}
+          <div className="text-muted mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            {ministries.length > 0 && <MinistryDots ministries={ministries} showNames />}
+            <span>Event {fmt(req.eventStart)}</span>
+            {phase && <span>· {phase}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-muted">{fmt(t.scheduledAt)}</span>
+        <div className="flex shrink-0 items-center gap-3">
+          <span className="text-muted" title="When it's on this output">on {fmt(t.scheduledAt)}</span>
           <StatusChip status={t.deliverable.status} />
           {channelName && <TouchRemoveButton id={t.id} channelName={channelName} />}
         </div>
@@ -86,8 +91,14 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
   if (!channel || !channel.active) notFound();
 
   const today = new Date();
+  // For the announcement video, the hand-picked Top-3 is the featured (live) set
+  // this week; everything else over the cap shows as "held".
+  const preferred =
+    channel.key === "announcement_video"
+      ? pickedRequestIds(await loadSundayTop3(comingSunday(today)))
+      : undefined;
   const [week, upcoming] = await Promise.all([
-    curatedTouchesThisWeekForChannel(channel, today),
+    curatedTouchesThisWeekForChannel(channel, today, preferred),
     upcomingTouchesForChannel(channel.id, today),
   ]);
   const { live, held, liveEventCount, cap } = week;

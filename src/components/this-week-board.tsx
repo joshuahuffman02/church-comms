@@ -3,9 +3,10 @@ import { DeliverableStatusButton } from "@/components/deliverable-status-button"
 import { UpdateDoneButton } from "@/components/update-done-button";
 import { TaskDoneButton } from "@/components/task-done-button";
 import { StandingTaskDoneButton } from "@/components/standing-task-done-button";
-import { addTop3Item, removeTop3Item } from "@/actions/video-top3";
+import { addTop3Item, removeTop3Item, replaceTop3Item } from "@/actions/video-top3";
 import { KIND_LABEL } from "@/lib/updates";
 import { initials } from "@/lib/tasks";
+import { titleCase, taskSourceLabel } from "@/lib/labels";
 
 type Row = {
   id: string;
@@ -20,14 +21,20 @@ type Row = {
 const fmt = (d: Date | null) =>
   d ? d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : "";
 
+// Cap long lists so a backlog (e.g. lots of past-due imported events) doesn't
+// become a wall — show the soonest few, then a link to the full board.
+const SECTION_LIMIT = 8;
+
 function Section({ title, color, rows, kind, hint }: { title: string; color: string; rows: Row[]; kind: "make" | "video" | "risk"; hint?: string }) {
+  const shown = rows.slice(0, SECTION_LIMIT);
+  const more = rows.length - shown.length;
   return (
     <div className="card-float p-5 mb-4" style={{ borderLeft: `5px solid ${color}` }}>
       <div className="font-bold mb-1">{title} <span className="text-muted">· {rows.length}</span></div>
       {hint && <div className="text-muted text-xs mb-3">{hint}</div>}
       {!hint && <div className="mb-2" />}
       {rows.length === 0 && <div className="text-muted text-sm">Nothing here this week 🎉</div>}
-      {rows.map(r => (
+      {shown.map(r => (
         <div key={r.id} className="flex items-center justify-between gap-3 py-2 border-t border-slate-100 text-sm">
           <Link href={`/requests/${r.requestId}`} className="hover:underline">
             <b>{r.request.title}</b> <span className="text-muted">· {r.channel.name}</span>
@@ -41,11 +48,19 @@ function Section({ title, color, rows, kind, hint }: { title: string; color: str
                 {initials(r.ownerName)}
               </span>
             )}
-            <span className="text-muted">{kind === "video" ? `locks ${fmt(r.productionDueAt)}` : `due ${fmt(r.productionDueAt)}`}</span>
-            {kind === "make" && <DeliverableStatusButton id={r.id} status={r.status} />}
+            <span className="text-muted">{kind === "video" ? `finalize by ${fmt(r.productionDueAt)}` : `due ${fmt(r.productionDueAt)}`}</span>
+            {(kind === "make" || kind === "risk") && <DeliverableStatusButton id={r.id} status={r.status} />}
           </div>
         </div>
       ))}
+      {more > 0 && (
+        <Link
+          href="/pipeline"
+          className="mt-1 block border-t border-slate-100 pt-3 text-sm font-semibold text-sky-600 hover:underline"
+        >
+          +{more} more — see all in Production →
+        </Link>
+      )}
     </div>
   );
 }
@@ -72,7 +87,8 @@ function LoopRow({ t, label, color }: { t: LoopChange; label: string; color: str
 function LoopSection({ add, remove }: { add: LoopChange[]; remove: LoopChange[] }) {
   return (
     <div className="card-float p-5 mb-4" style={{ borderLeft: "5px solid #38bdf8" }}>
-      <div className="font-bold mb-3">🔁 Loop changes for Sunday</div>
+      <div className="font-bold mb-1">🔁 Loop changes for Sunday</div>
+      <div className="text-muted text-xs mb-3">Slides to add or remove from the pre-service loop.</div>
       {add.length === 0 && remove.length === 0 && (
         <div className="text-muted text-sm">No loop changes this Sunday 🎉</div>
       )}
@@ -170,12 +186,12 @@ function AdminTaskRow({ t }: { t: AdminTask }) {
           </span>
           {t.category && (
             <span className="rounded-full bg-sky-bg px-2 py-0.5 text-xs font-semibold text-sky-700">
-              {t.category}
+              {titleCase(t.category)}
             </span>
           )}
-          {t.source && t.source !== "manual" && (
+          {taskSourceLabel(t.source) && (
             <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs font-semibold text-violet-700">
-              {t.source}
+              {taskSourceLabel(t.source)}
             </span>
           )}
           <span className="ml-auto text-muted text-xs">{fmt(t.dueAt)}</span>
@@ -218,7 +234,7 @@ function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item
         ⭐ Announcement video — Top 3 for {fmt(sunday)} <span className="text-muted">· {items.length}/3</span>
       </div>
       <div className="text-muted text-xs mb-3">
-        The 3 things to feature on this Sunday&apos;s video — pick upcoming events (any date) or add an awareness item.
+        These are what air on this Sunday&apos;s video — and what the run-of-show &amp; script export. Pick upcoming events (any date) or add an awareness item.
       </div>
       {items.length === 0 && <div className="text-muted text-sm mb-2">No Top 3 picked yet.</div>}
       {items.map((it, i) => (
@@ -237,17 +253,40 @@ function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item
         </div>
       ))}
       {!full && (
-        <form action={addTop3Item} className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+        <form action={addTop3Item} className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
           <input type="hidden" name="sunday" value={sunday.toISOString()} />
-          <select name="requestId" className="rounded-2xl border px-3 py-1.5 text-sm" defaultValue="">
+          <select name="requestId" className="w-full rounded-2xl border px-3 py-1.5 text-sm" defaultValue="">
             <option value="">— pick an upcoming event —</option>
             {options.map((o) => (
               <option key={o.id} value={o.id}>{o.title} ({fmt(o.date)})</option>
             ))}
           </select>
-          <span className="text-muted text-xs">or</span>
-          <input name="label" placeholder="awareness item (e.g. Camp Awesome Staff Needs)" className="rounded-2xl border px-3 py-1.5 text-sm flex-1 min-w-[12rem]" />
-          <button type="submit" className="btn-primary text-sm">＋ Add</button>
+          <div className="text-muted text-xs">or add an awareness item:</div>
+          <div className="flex gap-2">
+            <input name="label" placeholder="e.g. Camp Awesome staff needs" className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm" />
+            <button type="submit" className="btn-primary shrink-0 text-sm">＋ Add</button>
+          </div>
+        </form>
+      )}
+      {full && options.length > 0 && (
+        <form action={replaceTop3Item} className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
+          <div className="text-muted text-xs">Full at 3 — swap one out in a single step:</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select name="removeId" defaultValue="" required className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm">
+              <option value="" disabled>— take off —</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>{it.title}</option>
+              ))}
+            </select>
+            <span className="text-muted text-xs">with</span>
+            <select name="requestId" defaultValue="" required className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm">
+              <option value="" disabled>— add event —</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>{o.title} ({fmt(o.date)})</option>
+              ))}
+            </select>
+            <button type="submit" className="btn-primary shrink-0 text-sm">Swap</button>
+          </div>
         </form>
       )}
     </div>
@@ -318,24 +357,59 @@ export function ThisWeekBoard({
   weekStart: Date;
   weekEnd: Date;
 }) {
+  // A quiet week shouldn't be eight near-empty cards. Render only the sections
+  // that need the user this week; the Top-3 picker always shows (it's the weekly
+  // curation action, not a to-do). Most urgent first, planning last.
+  const standingLeft = standingTasks.filter((t) => !t.done).length;
+  const allCaughtUp =
+    atRisk.length === 0 &&
+    make.length === 0 &&
+    videoLocks.length === 0 &&
+    loopAdd.length === 0 &&
+    loopRemove.length === 0 &&
+    messageUpdates.length === 0 &&
+    adminTasks.length === 0 &&
+    standingLeft === 0;
+
   return (
     <div className="max-w-3xl">
       <h1 className="text-2xl font-extrabold mb-1">This Week ☁️</h1>
       <p className="text-muted mb-5">{fmt(weekStart)} – {fmt(weekEnd)}</p>
+
+      {atRisk.length > 0 && (
+        <Section
+          title="⚠️ At risk"
+          hint="Past their make-by date and not finished yet — bump the date or mark it done."
+          color="#ef4444"
+          rows={atRisk}
+          kind="risk"
+        />
+      )}
+      {make.length > 0 && (
+        <Section
+          title="🎨 Make this week"
+          hint="Assets to finish this week — so they're ready before they go out."
+          color="#f59e0b"
+          rows={make}
+          kind="make"
+        />
+      )}
+      {standingTasks.length > 0 && <StandingTasksSection tasks={standingTasks} />}
+      {adminTasks.length > 0 && <AdminTasksSection tasks={adminTasks} />}
+      {messageUpdates.length > 0 && <MessageUpdatesSection updates={messageUpdates} />}
+      {(loopAdd.length > 0 || loopRemove.length > 0) && (
+        <LoopSection add={loopAdd} remove={loopRemove} />
+      )}
       <Top3Section sunday={top3Sunday} items={top3Items} options={top3Options} />
-      <StandingTasksSection tasks={standingTasks} />
-      <AdminTasksSection tasks={adminTasks} />
-      <MessageUpdatesSection updates={messageUpdates} />
-      <Section
-        title="🎨 Make / Design this week"
-        hint="Assets to finish this week — so they're ready before they go out."
-        color="#f59e0b"
-        rows={make}
-        kind="make"
-      />
-      <Section title="📺 Announcement video — locking this week" color="#a78bfa" rows={videoLocks} kind="video" />
-      <LoopSection add={loopAdd} remove={loopRemove} />
-      <Section title="⚠️ At risk" color="#ef4444" rows={atRisk} kind="risk" />
+      {videoLocks.length > 0 && (
+        <Section title="📺 Announcement video — finalize this week" color="#a78bfa" rows={videoLocks} kind="video" />
+      )}
+
+      {allCaughtUp && (
+        <p className="text-muted mt-2 text-center text-sm">
+          Nothing else needs you this week ✨
+        </p>
+      )}
     </div>
   );
 }

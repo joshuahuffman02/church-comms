@@ -1,4 +1,4 @@
-export type ChannelType = "windowed" | "dated_instance" | "one_shot";
+export type ChannelType = "windowed" | "dated_instance" | "one_shot" | "single_weekday";
 export type Phase = "awareness" | "register" | "reminder" | "day_of" | "follow_up";
 
 export interface ChannelConfig {

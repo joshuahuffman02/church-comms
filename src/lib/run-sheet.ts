@@ -3,6 +3,7 @@ import { weekRange, loopChangesForSunday } from "@/lib/week";
 import { addDays, atMidnight } from "@/lib/engine/dates";
 import { activeUpdateAt, type EventUpdateLite } from "@/lib/updates";
 import { effectiveEventCap, splitByWeeklyCap, type RankableEvent } from "@/lib/social-curation";
+import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 
 // ---------------------------------------------------------------------------
@@ -209,7 +210,8 @@ function toItem(t: LoadedTouch): RunSheetItem {
 export function groupTouchesByChannel(
   channels: RunSheetChannelMeta[],
   weekTouches: LoadedTouch[],
-  sunday: Date
+  sunday: Date,
+  avPreferred?: readonly string[],
 ): RunSheetChannel[] {
   const s = atMidnight(sunday);
   const sundayNext = addDays(s, 1); // half-open upper bound for "on Sunday"
@@ -232,8 +234,10 @@ export function groupTouchesByChannel(
     // Capped channels: the run sheet is the production doc, so only the events
     // that make the cap appear — held items drop off.
     const cap = effectiveEventCap(c);
+    // The announcement video features the hand-picked Top-3 (then fills).
+    const preferred = c.key === "announcement_video" ? avPreferred : undefined;
     const relevant = cap
-      ? splitByWeeklyCap(windowed, loadedTouchEvent, cap).live
+      ? splitByWeeklyCap(windowed, loadedTouchEvent, cap, preferred).live
       : windowed;
     return {
       channelId: c.id,
@@ -286,7 +290,8 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     ],
   })) as unknown as LoadedTouch[];
 
-  const runChannels = groupTouchesByChannel(channels, weekTouches, sunday);
+  const avPreferred = pickedRequestIds(await loadSundayTop3(sunday));
+  const runChannels = groupTouchesByChannel(channels, weekTouches, sunday, avPreferred);
 
   // Loop add/remove: the loop channel's touches around this Sunday vs last.
   // loopChangesForSunday compares the touch date to the Sunday (add) and the

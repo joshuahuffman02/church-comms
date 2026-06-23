@@ -1,6 +1,5 @@
-import Link from "next/link";
-
 import { UpdateManager } from "@/components/update-manager";
+import { SettingsNav } from "@/components/settings-nav";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { getUpdateStatus } from "@/lib/updater";
@@ -26,25 +25,17 @@ export default async function UpdatesSettingsPage() {
   const status = await getUpdateStatus({ fetch: true });
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500">Settings</p>
-          <h1 className="text-3xl font-bold text-slate-950">Updates</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600">
-            Keep this local church install on the latest approved GitHub code
-            while leaving private church data in the local database and env file.
-          </p>
-        </div>
-        <Link
-          className="text-sm font-medium text-slate-600 hover:text-slate-950"
-          href="/settings/channels"
-        >
-          Back to settings
-        </Link>
+    <div className="max-w-4xl space-y-6">
+      <SettingsNav />
+      <div>
+        <h1 className="text-2xl font-extrabold text-ink">Updates ⬆️</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted">
+          Keep this local church install on the latest approved GitHub code while
+          leaving private church data in the local database and env file.
+        </p>
       </div>
 
       <UpdateManager initialStatus={status} />
-    </main>
+    </div>
   );
 }

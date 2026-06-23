@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { atMidnight } from "@/lib/engine/dates";
 import { createSprint, endSprint } from "@/actions/campaigns";
 import { AdminOnlyCard } from "@/components/admin-only-card";
+import { SettingsNav } from "@/components/settings-nav";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -38,9 +38,11 @@ export default async function Sprints({
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-1">Sprints 🏃</h1>
+      <SettingsNav />
+      <h1 className="text-2xl font-extrabold mb-1">Big pushes 🏃</h1>
       <p className="text-muted mb-5">
-        Time-boxed campaigns that temporarily suspend the volume guardrails.
+        All-out promotion windows for a big event (Easter, Christmas, VBS) that
+        briefly lift the everyday limits. Also called sprints.
       </p>
 
       {/* Quota line */}
@@ -52,11 +54,11 @@ export default async function Sprints({
         <span className="text-xl">{overQuota ? "⚠️" : "📊"}</span>
         <div>
           <div className={`font-semibold ${overQuota ? "text-amber-700" : ""}`}>
-            Sprints this year: {usedThisYear} / {quota}
+            Big pushes this year: {usedThisYear} / {quota}
           </div>
           {overQuota && (
             <div className="text-sm text-amber-700">
-              You&apos;re over your annual sprint quota — consider holding off.
+              You&apos;re over your yearly big-push budget — consider holding off.
             </div>
           )}
         </div>
@@ -64,10 +66,10 @@ export default async function Sprints({
 
       {/* Start a sprint */}
       <div className="card-float p-5 mb-5">
-        <h2 className="font-bold mb-3">Start a sprint</h2>
+        <h2 className="font-bold mb-3">Start a big push</h2>
         {error && (
           <div className="mb-3 rounded-2xl bg-rose-50 border border-rose-200 px-4 py-2 text-sm text-rose-700">
-            Please give the sprint a name and a valid date range (end on or after start).
+            Please give it a name and a valid date range (end on or after start).
           </div>
         )}
         <form action={createSprint} className="flex flex-wrap items-end gap-3">
@@ -90,7 +92,7 @@ export default async function Sprints({
             <input name="endsAt" type="date" required className="rounded-2xl border px-3 py-2 text-sm text-ink" />
           </label>
           <button className="rounded-full bg-ink text-white px-5 py-2 text-sm font-semibold">
-            Start sprint
+            Start
           </button>
         </form>
       </div>
@@ -98,10 +100,10 @@ export default async function Sprints({
       {/* Sprint list */}
       <div className="card-float overflow-hidden">
         <div className="px-5 py-3 text-xs font-bold text-muted border-b border-slate-100">
-          All sprints
+          All big pushes
         </div>
         {campaigns.length === 0 && (
-          <div className="px-5 py-6 text-muted text-sm">No sprints yet.</div>
+          <div className="px-5 py-6 text-muted text-sm">No big pushes yet.</div>
         )}
         {campaigns.map((c) => {
           const active = isActive(c);
@@ -122,18 +124,12 @@ export default async function Sprints({
               </span>
               <form action={endThis} className="ml-auto">
                 <button className="rounded-full border px-3 py-1 text-xs font-semibold text-muted hover:bg-sky-bg transition">
-                  End sprint
+                  End
                 </button>
               </form>
             </div>
           );
         })}
-      </div>
-
-      <div className="mt-5">
-        <Link href="/settings/channels" className="text-sm font-semibold text-muted hover:underline">
-          ← Back to settings
-        </Link>
       </div>
     </div>
   );

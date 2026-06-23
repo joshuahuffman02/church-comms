@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { weekRange, comingSunday } from "@/lib/week";
 import { addDays, atMidnight } from "@/lib/engine/dates";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
+import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
 
 // ---------------------------------------------------------------------------
 // Pure builders
@@ -273,30 +274,50 @@ export async function loadVideoThisWeek(today: Date): Promise<{
 }> {
   const { start } = weekRange(today);
   const sunday = comingSunday(today);
+
   // Window: Monday of this week through the coming Sunday (inclusive).
   const upper = addDays(sunday, 1);
   const channelId = await channelIdByKey("announcement_video");
-  if (!channelId) return { sunday, items: [] };
-  const deliverables = await db.deliverable.findMany({
-    where: {
-      channelId,
-      request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
-      instanceDate: { gte: start, lt: upper },
-    },
-    include: { request: { include: { ministry: true } } },
-    orderBy: [
-      { request: { tier: "asc" } },
-      { request: { eventStart: "asc" } },
-      { request: { title: "asc" } },
-      { instanceDate: "asc" },
-    ],
-  });
-  const items: VideoItem[] = deliverables.map((d) => ({
+
+  const [picks, deliverables] = await Promise.all([
+    loadSundayTop3(sunday),
+    channelId
+      ? db.deliverable.findMany({
+          where: {
+            channelId,
+            request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
+            instanceDate: { gte: start, lt: upper },
+          },
+          include: { request: { include: { ministry: true } } },
+          orderBy: [
+            { request: { tier: "asc" } },
+            { request: { eventStart: "asc" } },
+            { request: { title: "asc" } },
+            { instanceDate: "asc" },
+          ],
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const toItem = (d: (typeof deliverables)[number]): VideoItem => ({
     title: d.request.title,
     nextStepText: d.request.nextStepText,
     tier: d.request.tier,
+  });
+
+  // No picks → the automatic tier/date ranking (unchanged). With picks → feature
+  // them first (1-2-3 order), then fill the remaining slots with the auto list.
+  if (picks.length === 0) {
+    return { sunday: atMidnight(sunday), items: deliverables.map(toItem) };
+  }
+  const pickedIds = new Set(pickedRequestIds(picks));
+  const featured: VideoItem[] = picks.map((p) => ({
+    title: p.request?.title ?? p.label ?? "(untitled)",
+    nextStepText: p.request?.nextStepText ?? null,
+    tier: p.request?.tier ?? 99,
   }));
-  return { sunday: atMidnight(sunday), items };
+  const fill = deliverables.filter((d) => !pickedIds.has(d.requestId)).map(toItem);
+  return { sunday: atMidnight(sunday), items: [...featured, ...fill] };
 }
 
 /**
@@ -315,13 +336,17 @@ export async function loadVideoScriptThisWeek(today: Date): Promise<{
   const { start } = weekRange(today);
   const sunday = comingSunday(today);
   const upper = addDays(sunday, 1);
-  const channelId = await channelIdByKey("announcement_video");
 
-  const [setting, deliverables] = await Promise.all([
-    db.setting.findUnique({
-      where: { id: 1 },
-      select: { videoScriptIntro: true, videoScriptOutro: true },
-    }),
+  const setting = await db.setting.findUnique({
+    where: { id: 1 },
+    select: { videoScriptIntro: true, videoScriptOutro: true },
+  });
+  const intro = setting?.videoScriptIntro ?? DEFAULT_VIDEO_SCRIPT_INTRO;
+  const outro = setting?.videoScriptOutro ?? DEFAULT_VIDEO_SCRIPT_OUTRO;
+
+  const channelId = await channelIdByKey("announcement_video");
+  const [picks, deliverables] = await Promise.all([
+    loadSundayTop3(sunday),
     channelId
       ? db.deliverable.findMany({
           where: {
@@ -344,17 +369,26 @@ export async function loadVideoScriptThisWeek(today: Date): Promise<{
       : Promise.resolve([]),
   ]);
 
-  const items: VideoScriptItem[] = deliverables.map((d) => ({
+  const toItem = (d: (typeof deliverables)[number]): VideoScriptItem => ({
     title: d.request.title,
     content: d.touches[0]?.content ?? null,
     description: d.request.description,
     nextStepText: d.request.nextStepText,
-  }));
+  });
 
-  return {
-    sunday: atMidnight(sunday),
-    items,
-    intro: setting?.videoScriptIntro ?? DEFAULT_VIDEO_SCRIPT_INTRO,
-    outro: setting?.videoScriptOutro ?? DEFAULT_VIDEO_SCRIPT_OUTRO,
-  };
+  if (picks.length === 0) {
+    return { sunday: atMidnight(sunday), items: deliverables.map(toItem), intro, outro };
+  }
+  // Feature the picks first (with their per-week slide copy where it exists),
+  // then fill remaining slots from the auto list.
+  const contentByReq = new Map(deliverables.map((d) => [d.requestId, d.touches[0]?.content ?? null]));
+  const pickedIds = new Set(pickedRequestIds(picks));
+  const featured: VideoScriptItem[] = picks.map((p) => ({
+    title: p.request?.title ?? p.label ?? "(untitled)",
+    content: p.request ? contentByReq.get(p.request.id) ?? null : null,
+    description: p.request?.description ?? null,
+    nextStepText: p.request?.nextStepText ?? null,
+  }));
+  const fill = deliverables.filter((d) => !pickedIds.has(d.requestId)).map(toItem);
+  return { sunday: atMidnight(sunday), items: [...featured, ...fill], intro, outro };
 }

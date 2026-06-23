@@ -58,6 +58,19 @@ export function computeDeliverable(
     instanceDate = lastWeekday(start, scheduleEnd, ch.cadence?.weekdays ?? [0]);
     if (catchUp && instanceDate && instanceDate < todayM) instanceDate = undefined;
     touches = instanceDate ? [{ scheduledAt: instanceDate, purposeLabel: phaseFor(instanceDate, event) }] : [];
+  } else if (ch.type === "single_weekday") {
+    // One post, on the chosen weekday (default Friday) on/before the "offset days
+    // before the deadline" mark — so it always lands on that weekday no matter
+    // what day the event falls on, with >= offset days of lead.
+    // Catch-up: if that weekday is already past, use the next chosen weekday
+    // on/after today (and on/before the deadline).
+    const weekdays = ch.cadence?.weekdays ?? [5];
+    const anchor = subDays(scheduleEnd, ch.defaultPublishOffsetDays);
+    let post = lastWeekday(subDays(anchor, 6), anchor, weekdays);
+    if (catchUp && (!post || post < todayM)) {
+      post = weekdaysBetween(todayM, scheduleEnd, weekdays)[0];
+    }
+    touches = post ? [{ scheduledAt: post, purposeLabel: phaseFor(post, event) }] : [];
   }
 
   const firstTouch = touches[0]?.scheduledAt ?? scheduleEnd;

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
+import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
 import { addDays, atMidnight } from "@/lib/engine/dates";
 import {
   LOCAL_ICAL_SOURCE,
@@ -10,6 +11,7 @@ import {
   configuredLocalIcalPath,
   loadLocalIcalEvents,
 } from "@/lib/external-calendar";
+import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form";
 import { IcalImportCalendar, type IcalImportRow } from "@/components/ical-import-calendar";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +33,10 @@ export default async function IcalImportPage() {
   const filePath = configuredLocalIcalPath();
   const today = atMidnight(new Date());
   const horizon = addDays(today, 180);
-  const data = await loadIcalImportData(filePath, today, horizon);
+  const [data, calendar] = await Promise.all([
+    loadIcalImportData(filePath, today, horizon),
+    activeExternalCalendarConfig(),
+  ]);
 
   if (data.ok) {
     return (
@@ -47,14 +52,34 @@ export default async function IcalImportPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-2">iCal import preview</h1>
+      <h1 className="text-2xl font-extrabold mb-2">Import from a calendar (.ics)</h1>
       <div className="card-float border border-amber-200 bg-amber-50 p-5">
-        <div className="font-bold text-amber-800 mb-1">iCal import is not ready</div>
-        <p className="text-sm text-amber-800 mb-3">{data.error}</p>
-        <p className="text-sm text-muted">
-          Set <code className="font-mono">ICAL_IMPORT_FILE</code> to the absolute
-          path of an <code className="font-mono">.ics</code> file on this server.
+        <div className="font-bold text-amber-800 mb-1">No calendar file connected yet</div>
+        <p className="text-sm text-amber-800 mb-3">
+          Paste an iCal URL below for the regular calendar sync, or connect a one-off local file for
+          the file-import preview.
         </p>
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-white/80 p-4">
+          <ExternalCalendarUrlForm
+            currentUrl={calendar.sourceUrl}
+            buttonLabel={calendar.feedUrl ? "Update URL" : "Connect calendar"}
+          />
+          {calendar.feedUrl && (
+            <Link href="/import/google" className="mt-3 inline-block text-sm font-semibold text-sky-700 underline">
+              Review synced calendar events
+            </Link>
+          )}
+        </div>
+        <details className="rounded-2xl border border-amber-200 bg-white/70 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-amber-900 select-none">
+            Local file setup details
+          </summary>
+          <p className="text-muted mt-2">
+            Set <code className="font-mono">ICAL_IMPORT_FILE</code> to the absolute
+            path of an <code className="font-mono">.ics</code> file on this server.
+          </p>
+          <p className="text-muted mt-2 text-xs">{data.error}</p>
+        </details>
       </div>
       <Link href="/import/planning-center" className="mt-4 inline-block text-sm font-semibold underline">
         Back to Planning Center import

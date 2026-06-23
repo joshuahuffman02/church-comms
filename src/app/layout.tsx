@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { sans } from "./font";
 import { Nav } from "@/components/nav";
+import { CalendarImportToast } from "@/components/calendar-import-toast";
 import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default async function RootLayout({
       <body className="min-h-screen lg:flex">
         {session ? <Nav /> : null}
         <main key="page" className="min-w-0 flex-1 p-4 sm:p-6 float-in">{children}</main>
+        {session ? <CalendarImportToast /> : null}
       </body>
     </html>
   );
