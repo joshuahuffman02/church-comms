@@ -16,11 +16,16 @@ import { OwnerAssign } from "@/components/owner-assign";
 import { AssetAttach, type AssetRow } from "@/components/asset-attach";
 import { PcoUnlinkButton } from "@/components/pco-unlink-button";
 import { MinistryDots } from "@/components/ministry-dots";
+import { ChannelPicker, type PickerPlacement } from "@/components/channel-picker";
+import { FeatureVideoButton } from "@/components/feature-video-button";
+import { comingSunday } from "@/lib/week";
+import { atMidnight } from "@/lib/engine/dates";
 import { getSessionUser } from "@/lib/authz";
 import { effectiveOwnerId } from "@/lib/tasks";
 import { isEditor } from "@/lib/roles";
 import { classifyByTags, type TagRule } from "@/lib/tag-rules";
 import { SuggestedPlaybook } from "@/components/suggested-playbook";
+import { pcoStatusLabel, tierLabel, tierTitle } from "@/lib/labels";
 import Link from "next/link";
 
 const APPROVAL_STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -82,7 +87,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
     db.channel.findMany({
       where: { active: true },
       orderBy: { sortOrder: "asc" },
-      select: { key: true, name: true, color: true },
+      select: { id: true, key: true, name: true, color: true },
     }),
     db.eventTemplate.findMany({
       where: { active: true },
@@ -166,6 +171,28 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
     };
   });
 
+  const placements: PickerPlacement[] = request.deliverables
+    .filter((d) => d.status !== "skipped")
+    .map((d) => {
+      const sortedTouches = [...d.touches].sort(
+        (a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime(),
+      );
+      return {
+        channelId: d.channelId,
+        deliverableId: d.id,
+        publishMs: sortedTouches[0]?.scheduledAt.getTime() ?? null,
+      };
+    });
+
+  // Is this event already on THIS coming Sunday's announcement video?
+  const comingSun = atMidnight(comingSunday(new Date()));
+  const comingSundayLabel = comingSun.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const featuredThisSunday = request.deliverables.some(
+    (d) =>
+      d.channel.key === "announcement_video" &&
+      d.touches.some((t) => atMidnight(t.scheduledAt).getTime() === comingSun.getTime()),
+  );
+
   const assetRows: AssetRow[] = request.assets.map((a) => ({
     id: a.id,
     url: a.url,
@@ -235,8 +262,11 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
               ))}
             </span>
           )}
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted">
-            Tier {request.tier}
+          <span
+            title={tierTitle(request.tier)}
+            className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted"
+          >
+            {tierLabel(request.tier)}
           </span>
           {/* Advisory tag-suggested tier — only when it differs from the
               working tier (so a confirmed/edited tier doesn't show noise). */}
@@ -322,70 +352,77 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
             show the linked badge + approval + Church Center link + Unlink; when
             not, a subtle link to attach this request to a real PCO event. */}
         {request.pcoEventId ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-              ✅ Linked to Planning Center
-            </span>
-            {request.pcoApprovalStatus && (
+          <details className="mt-3">
+            {/* Summary keeps the one signal that matters at a glance (approval);
+                the rest of the Planning Center detail tucks behind "details". */}
+            <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 select-none">
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                🗓️ From Planning Center
+              </span>
+              {request.pcoApprovalStatus && (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    request.pcoApprovalStatus === "A"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {request.pcoApprovalStatus === "A"
+                    ? "✅ Approved in Planning Center"
+                    : pcoStatusLabel(request.pcoApprovalStatus)}
+                </span>
+              )}
+              <span className="text-xs font-semibold text-muted underline">details</span>
+            </summary>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {/* Publish state in Church Center (read-only PCO signal). */}
               <span
                 className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  request.pcoApprovalStatus === "A"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-amber-100 text-amber-700"
+                  request.pcoVisibleInChurchCenter
+                    ? "bg-sky-100 text-sky-700"
+                    : "bg-slate-100 text-muted"
                 }`}
               >
-                {request.pcoApprovalStatus === "A"
-                  ? "✅ Approved in PCO"
-                  : `PCO status: ${request.pcoApprovalStatus}`}
+                {request.pcoVisibleInChurchCenter
+                  ? "📣 Published in Church Center"
+                  : "Not yet published"}
               </span>
-            )}
-            {/* Publish state in Church Center (read-only PCO signal). */}
-            <span
-              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                request.pcoVisibleInChurchCenter
-                  ? "bg-sky-100 text-sky-700"
-                  : "bg-slate-100 text-muted"
-              }`}
-            >
-              {request.pcoVisibleInChurchCenter
-                ? "📣 Published in Church Center"
-                : "Not yet published"}
-            </span>
-            {request.pcoFeatured && (
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                ⭐ Featured
-              </span>
-            )}
-            {/* Room-request approval status (the pending-room triage signal). */}
-            {request.pcoRoomStatus && (
-              <span
-                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  request.pcoRoomStatus === "approved"
-                    ? "bg-emerald-100 text-emerald-700"
+              {request.pcoFeatured && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  ⭐ Featured
+                </span>
+              )}
+              {/* Room-request approval status (the pending-room triage signal). */}
+              {request.pcoRoomStatus && (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    request.pcoRoomStatus === "approved"
+                      ? "bg-emerald-100 text-emerald-700"
+                      : request.pcoRoomStatus === "pending"
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-rose-100 text-rose-700"
+                  }`}
+                >
+                  {request.pcoRoomStatus === "approved"
+                    ? "🚪 Rooms: approved"
                     : request.pcoRoomStatus === "pending"
-                      ? "bg-amber-100 text-amber-700"
-                      : "bg-rose-100 text-rose-700"
-                }`}
-              >
-                {request.pcoRoomStatus === "approved"
-                  ? "🚪 Rooms: approved"
-                  : request.pcoRoomStatus === "pending"
-                    ? "🚪 Rooms: pending"
-                    : "🚪 Rooms: rejected"}
-              </span>
-            )}
-            {request.pcoChurchCenterUrl && (
-              <a
-                href={request.pcoChurchCenterUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs font-semibold underline text-sky-700"
-              >
-                View on Church Center →
-              </a>
-            )}
-            {canEdit && <PcoUnlinkButton requestId={request.id} />}
-          </div>
+                      ? "🚪 Rooms: pending"
+                      : "🚪 Rooms: rejected"}
+                </span>
+              )}
+              {request.pcoChurchCenterUrl && (
+                <a
+                  href={request.pcoChurchCenterUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-semibold underline text-sky-700"
+                >
+                  View on Church Center →
+                </a>
+              )}
+              {canEdit && <PcoUnlinkButton requestId={request.id} />}
+            </div>
+          </details>
         ) : canEdit ? (
           <div className="mt-3">
             <Link
@@ -515,6 +552,27 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       {/* Admin Checklist: dated admin tasks from playbooks + manual tasks */}
       <EventTasks requestId={request.id} tasks={taskRows} templates={templateOptions} canEdit={canEdit} />
 
+      {/* Channel picker — where this event's promo is going */}
+      <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
+      {canEdit && (
+        <div className="-mt-2 mb-4 pl-1">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <FeatureVideoButton
+              requestId={request.id}
+              sundayLabel={comingSundayLabel}
+              alreadyFeatured={featuredThisSunday}
+            />
+            <Link href="/this-week" className="text-sm font-semibold text-sky-700 hover:underline">
+              Manage this Sunday&apos;s video ({comingSundayLabel}) →
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            This Sunday&apos;s Top&nbsp;3 video lineup is set here — not by the &ldquo;Announcement
+            Video&rdquo; chip above (that just books a slide for this event).
+          </p>
+        </div>
+      )}
+
       {/* Deliverables */}
       <DeliverableList rows={rows} users={activeUsers} currentUserId={me?.id ?? ""} canEdit={canEdit} />
 
@@ -525,7 +583,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       <div className="card-float p-5 mb-4">
         <h2 className="font-bold mb-3">Promotion timeline</h2>
         {timeline.length === 0 ? (
-          <p className="text-muted text-sm">No promotion touches scheduled yet.</p>
+          <p className="text-muted text-sm">Nothing scheduled to post yet.</p>
         ) : (
           <div className="grid gap-1">
             {timeline.map((t) => (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SettingsNav } from "@/components/settings-nav";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { parseRoles, isAdmin } from "@/lib/roles";
@@ -61,24 +62,13 @@ export default async function Users() {
 
   return (
     <div className="max-w-3xl">
+      <SettingsNav />
       <h1 className="text-2xl font-extrabold mb-1">Team &amp; access 👥</h1>
       <p className="text-muted mb-5 leading-relaxed">
         Add staff, set what they can do, and turn access off when someone leaves
         — no server access required. A user with no password set can&apos;t log
         in until you give them one.
       </p>
-
-      <div className="card-float p-4 mb-5 flex flex-wrap items-center gap-4 text-sm font-semibold">
-        <Link href="/settings/channels" className="hover:underline">
-          ⚙️ Outputs &amp; channels
-        </Link>
-        <Link href="/settings/sprints" className="hover:underline">
-          🏃 Sprints
-        </Link>
-        <Link href="/settings/approvals" className="hover:underline">
-          ✅ Approvals
-        </Link>
-      </div>
 
       {/* ---- Existing users -------------------------------------------------- */}
       <div className="grid gap-3 mb-6">
@@ -221,12 +211,6 @@ export default async function Users() {
           </div>
         </form>
       </details>
-
-      <div className="mt-5">
-        <Link href="/settings/channels" className="text-sm font-semibold text-muted hover:underline">
-          ← Back to settings
-        </Link>
-      </div>
     </div>
   );
 }

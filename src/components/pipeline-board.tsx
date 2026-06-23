@@ -13,6 +13,7 @@ import {
 import { setDeliverableStatus } from "@/actions/request-status";
 import { DELIVERABLE_STATUS_META } from "@/lib/status";
 import { MinistryDots, type MinistryDot } from "@/components/ministry-dots";
+import { tierLabel, tierTitle } from "@/lib/labels";
 
 /** One per-channel piece of work — the unit the board now tracks. */
 export type DeliverableCard = {
@@ -105,13 +106,13 @@ function Card({
       </div>
       <div className="mt-2 flex items-center justify-between gap-2 text-xs">
         <span className="flex items-center gap-2 text-muted">
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold">
-            Tier {card.tier}
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold" title={tierTitle(card.tier)}>
+            {tierLabel(card.tier)}
           </span>
           {card.productionDueAtMs != null ? (
             <span title="Make by">make by {fmt(card.productionDueAtMs)}</span>
           ) : (
-            <span className="text-slate-300">no due date</span>
+            <span className="text-muted">No deadline</span>
           )}
         </span>
         <span className="flex items-center gap-2">
@@ -311,11 +312,10 @@ export function PipelineBoard({
 
   return (
     <div className="max-w-full">
-      <h1 className="text-2xl font-extrabold mb-1">Pipeline 🗂️</h1>
+      <h1 className="text-2xl font-extrabold mb-1">Production 🗂️</h1>
       <p className="text-muted mb-1">
-        A per-output production board — each card is one piece of work. Drag it as
-        it moves from To-design → In progress → Proof → Ready → Scheduled →
-        Published.
+        A board of every piece to make — one card per channel. Drag it as it moves
+        from To design → In progress → Proof → Ready → Scheduled → Published.
       </p>
       {!canEdit && (
         <p className="mb-3 rounded-2xl bg-slate-50 px-4 py-2 text-sm font-semibold text-muted">
@@ -324,8 +324,8 @@ export function PipelineBoard({
       )}
       <p className="text-muted text-sm mb-4">
         Showing {visible.length}
-        {filtered ? ` of ${items.length}` : ""} active deliverable
-        {visible.length === 1 ? "" : "s"}
+        {filtered ? ` of ${items.length}` : ""} piece
+        {visible.length === 1 ? "" : "s"} to make
         {capped ? ` · ${totalActive} in production (capped at ${cap} soonest)` : ""}
       </p>
 

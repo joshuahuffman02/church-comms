@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { PlaybookEditor, type TemplateRow } from "@/components/playbook-editor";
+import { SettingsNav } from "@/components/settings-nav";
 
 export default async function PlaybooksSettings() {
   const me = await getSessionUser();
@@ -51,15 +52,13 @@ export default async function PlaybooksSettings() {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/settings/channels" className="text-sm text-muted hover:underline">
-        ← Settings
-      </Link>
-      <h1 className="text-2xl font-extrabold mb-2 mt-2">Event Playbooks 📋</h1>
+      <SettingsNav />
+      <h1 className="text-2xl font-extrabold mb-2 mt-2">Event checklists 📋</h1>
       <p className="text-muted mb-5 leading-relaxed">
-        Reusable, dated admin checklists. A playbook (e.g.{" "}
+        Reusable, dated checklists. A checklist (e.g.{" "}
         <b className="text-ink">Mission Trip</b>) is a list of tasks, each with{" "}
         <b className="text-ink">days before the event</b> it’s due plus notes /
-        tips. Apply a playbook to an event and the tasks land at the right time —
+        tips. Apply a checklist to an event and the tasks land at the right time —
         and show up on{" "}
         <Link href="/this-week" className="underline">
           This Week

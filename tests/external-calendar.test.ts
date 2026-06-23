@@ -41,6 +41,12 @@ describe("calendarUrlToIcsUrl", () => {
     const feed = "https://example.com/calendar.ics";
     expect(calendarUrlToIcsUrl(feed)).toBe(feed);
   });
+
+  it("converts webcal URLs to fetchable https URLs", () => {
+    expect(calendarUrlToIcsUrl("webcal://example.com/calendar.ics")).toBe(
+      "https://example.com/calendar.ics",
+    );
+  });
 });
 
 describe("external calendar configuration", () => {
@@ -172,6 +178,100 @@ END:VCALENDAR`);
       ["Womens Brunch", "possible_match"],
       ["Prayer Gathering", "missing"],
     ]);
-    expect(preview[1].matches[0]).toMatchObject({ id: "req-2" });
+    expect(preview[1].matches[0]).toMatchObject({
+      id: "req-2",
+      confidence: "possible",
+      reason: "same date with a similar title",
+    });
+  });
+
+  it("flags room-suffixed and renamed same-day titles as possible duplicates", () => {
+    const external = parseIcsEvents(`BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:1
+DTSTART;VALUE=DATE:20260714
+SUMMARY:Prayerwerks\\, lakeside room
+END:VEVENT
+BEGIN:VEVENT
+UID:2
+DTSTART;VALUE=DATE:20260714
+SUMMARY:Senior Lights 4th of July Picnic\\, MC
+END:VEVENT
+END:VCALENDAR`);
+
+    const preview = buildExternalEventPreview(
+      external,
+      [
+        {
+          id: "req-1",
+          title: "Prayerwerks",
+          eventStart: new Date(2026, 6, 14),
+          location: "Lakeside Room",
+          pcoEventId: null,
+        },
+        {
+          id: "req-2",
+          title: "Senior Ministries Indoor Picnic",
+          eventStart: new Date(2026, 6, 14),
+          location: "MC",
+          pcoEventId: "pco-2",
+        },
+      ],
+      new Date(2026, 5, 1),
+    );
+
+    expect(preview.map((row) => [row.event.title, row.status])).toEqual([
+      ["Prayerwerks, lakeside room", "possible_match"],
+      ["Senior Lights 4th of July Picnic, MC", "possible_match"],
+    ]);
+    expect(preview[0].matches[0]).toMatchObject({
+      id: "req-1",
+      confidence: "strong",
+    });
+    expect(preview[1].matches[0]).toMatchObject({
+      id: "req-2",
+      confidence: "possible",
+    });
+  });
+
+  it("does not treat weak ministry/category overlaps as duplicates", () => {
+    const external = parseIcsEvents(`BEGIN:VCALENDAR
+BEGIN:VEVENT
+UID:1
+DTSTART;VALUE=DATE:20260714
+SUMMARY:RISE\\, chapel (10:30)
+END:VEVENT
+BEGIN:VEVENT
+UID:2
+DTSTART;VALUE=DATE:20260714
+SUMMARY:Missionary of Month- Bob and Melissa Hill
+END:VEVENT
+END:VCALENDAR`);
+
+    const preview = buildExternalEventPreview(
+      external,
+      [
+        {
+          id: "req-1",
+          title: "Rise Dodgeball and Donuts",
+          eventStart: new Date(2026, 6, 14),
+          location: null,
+          pcoEventId: null,
+        },
+        {
+          id: "req-2",
+          title: "Missionary of the Month- Kim Larson",
+          eventStart: new Date(2026, 6, 14),
+          location: null,
+          pcoEventId: null,
+        },
+      ],
+      new Date(2026, 5, 1),
+    );
+
+    expect(preview.map((row) => [row.event.title, row.status])).toEqual([
+      ["Missionary of Month- Bob and Melissa Hill", "missing"],
+      ["RISE, chapel (10:30)", "missing"],
+    ]);
   });
 });

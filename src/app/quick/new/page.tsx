@@ -35,11 +35,11 @@ export default async function NewQuickItem() {
 
   return (
     <form action={submit} className="card-float p-6 max-w-xl grid gap-3">
-      <h1 className="text-2xl font-extrabold">Quick Item ⚡</h1>
+      <h1 className="text-2xl font-extrabold">Quick post ⚡</h1>
       <p className="text-sm text-muted">
         For standalone things that aren&apos;t a full event — e.g. &ldquo;Website:
         bold Easter service times&rdquo;, or &ldquo;App push: parking
-        reminder&rdquo;. It shows up on the chosen output for that week.
+        reminder&rdquo;. It shows up on the chosen channel for that week.
       </p>
 
       <label className="text-sm text-muted">What needs to happen?</label>
@@ -50,7 +50,7 @@ export default async function NewQuickItem() {
         className="rounded-2xl border px-4 py-2"
       />
 
-      <label className="text-sm text-muted">Which output?</label>
+      <label className="text-sm text-muted">Which channel?</label>
       <select name="channelId" required className="rounded-2xl border px-4 py-2">
         {channels.map((c) => (
           <option key={c.id} value={c.id}>

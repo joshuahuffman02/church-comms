@@ -215,6 +215,39 @@ model ExternalCalendarIgnore {
   @@index([source, dateKey])
 }
 
+/// A read-only calendar event discovered by the daily/manual Google/iCal check
+/// and waiting for staff review. This keeps the integration one-way: the app
+/// notices possible new events, then an admin chooses Accept or Ignore.
+model CalendarImportCandidate {
+  id                   String   @id @default(cuid())
+  source               String
+  key                  String
+  uid                  String
+  dateKey              String
+  title                String
+  startsAt             DateTime
+  endsAt               DateTime?
+  location             String?
+  description          String?
+  operationalNoise     Boolean  @default(false)
+  status               String   @default("pending") // pending | accepted | ignored
+  recommendation       String   @default("review") // accept | ignore | review
+  recommendationReason String?
+  matchRequestId       String?
+  matchTitle           String?
+  matchDate            DateTime?
+  matchReason          String?
+  matchConfidence      String?
+  matchScore           Float?
+  firstSeenAt          DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([source, key])
+  @@index([source, status, dateKey])
+  @@index([status, updatedAt])
+  @@index([matchRequestId])
+}
+
 /// A dated phase in an event's "Message Arc" — the comms team plans a timeline
 /// of message moments for an event (Save-the-date → Registration open → Last
 /// call → Day-of, etc.), each taking effect on `scheduledFor` and optionally
@@ -429,6 +462,7 @@ model Setting {
   palette                   Json?
   videoScriptIntro          String?
   videoScriptOutro          String?
+  externalCalendarUrl       String?
 }
 
 model Campaign {

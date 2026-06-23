@@ -1,4 +1,5 @@
 import { submitIntake } from "@/actions/intake";
+import { RegistrationFields } from "@/components/registration-fields";
 
 export default async function SubmitPage({
   searchParams,
@@ -110,41 +111,8 @@ export default async function SubmitPage({
           </label>
         </fieldset>
 
-        {/* Registration */}
-        <fieldset className="grid gap-3">
-          <legend className="text-sm font-bold text-muted mb-1">Registration</legend>
-          <label className="flex items-center gap-2 text-sm">
-            <input name="needsRegistration" type="checkbox" className="h-4 w-4 rounded" />
-            <span>This event needs sign-ups</span>
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Registration link</span>
-              <input
-                name="registrationUrl"
-                type="url"
-                placeholder="https://church.org/vbs"
-                className="rounded-2xl border px-4 py-2"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Cost</span>
-              <input
-                name="cost"
-                placeholder="Free / $10"
-                className="rounded-2xl border px-4 py-2"
-              />
-            </label>
-          </div>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">Registration closes</span>
-            <input
-              name="registrationClosesAt"
-              type="date"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-        </fieldset>
+        {/* Registration (fields reveal only when sign-ups are needed) */}
+        <RegistrationFields />
 
         {/* The message */}
         <fieldset className="grid gap-3">

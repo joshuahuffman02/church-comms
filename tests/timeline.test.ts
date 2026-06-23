@@ -211,3 +211,36 @@ describe("catch-up mode (mid-stream import)", () => {
     expect(cu.status).toBe("to_design");
   });
 });
+
+// ---------------------------------------------------------------------------
+// single_weekday: one post, on a chosen weekday (e.g. Friday), on/before the
+// "N days before the event" mark — regardless of what day the event falls on.
+// Built with local-constructor dates + local getters so it's timezone-robust.
+// ---------------------------------------------------------------------------
+describe("single_weekday (post once, on a set weekday)", () => {
+  const wd = (d: Date) => d.getDay();
+  const ymd = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const fridaySocial: ChannelConfig = {
+    key: "facebook", name: "Facebook", type: "single_weekday",
+    defaultPublishOffsetDays: 14, productionLeadDays: 3,
+    cadence: { weekdays: [5] }, tierEligibility: [1],
+  };
+  const today = new Date(2026, 5, 15); // Mon Jun 15 2026
+
+  it("posts once on the Friday on/before (event - offset)", () => {
+    const event = new Date(2026, 6, 26); // Sun Jul 26
+    const d = computeDeliverable(fridaySocial, { eventStart: event, tier: 1 }, today);
+    expect(d.touches.map((t) => ymd(t.scheduledAt))).toEqual(["2026-07-10"]); // Fri on/before Jul 12 (=Jul26-14)
+    expect(wd(d.touches[0].scheduledAt)).toBe(5); // Friday
+    expect(ymd(d.productionDueAt)).toBe("2026-07-07"); // Jul 10 - lead 3
+    expect(d.status).toBe("to_design");
+  });
+
+  it("still lands on the chosen weekday when the event is NOT a Sunday", () => {
+    const event = new Date(2026, 6, 22); // Wed Jul 22
+    const d = computeDeliverable(fridaySocial, { eventStart: event, tier: 1 }, today);
+    expect(d.touches.map((t) => ymd(t.scheduledAt))).toEqual(["2026-07-03"]); // Fri on/before Jul 8 (=Jul22-14)
+    expect(wd(d.touches[0].scheduledAt)).toBe(5); // Friday
+  });
+});

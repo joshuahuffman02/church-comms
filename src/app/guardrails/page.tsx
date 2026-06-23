@@ -8,7 +8,7 @@ export default async function GuardrailsPage() {
 
   return (
     <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold mb-1">Guardrails 🛡️</h1>
+      <h1 className="text-2xl font-extrabold mb-1">Heads-up 🛡️</h1>
       <p className="text-muted mb-5">
         {actionable.length === 0
           ? "Nothing needs a decision right now. ✨"

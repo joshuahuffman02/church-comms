@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { createMinistry, updateMinistry } from "@/actions/ministries";
 import { MinistryDeleteButton } from "@/components/ministry-delete-button";
+import { SettingsNav } from "@/components/settings-nav";
 
 // Reflects live DB state — render fresh each request.
 export const dynamic = "force-dynamic";
@@ -24,6 +24,7 @@ export default async function MinistriesSettings() {
 
   return (
     <div className="max-w-3xl">
+      <SettingsNav />
       <h1 className="text-2xl font-extrabold mb-2">Ministries 🎨</h1>
       <p className="text-muted mb-4 leading-relaxed">
         Ministries are the colored tags on every event. An event can belong to{" "}
@@ -32,18 +33,6 @@ export default async function MinistriesSettings() {
         <b className="text-ink">active</b>, and a ministry that&apos;s in use is
         deactivated (not deleted) so existing events keep their tag.
       </p>
-
-      <div className="card-float p-4 mb-4 flex flex-wrap items-center gap-4 text-sm font-semibold">
-        <Link href="/settings/channels" className="hover:underline">
-          ⚙️ Outputs &amp; channels
-        </Link>
-        <Link href="/settings/users" className="hover:underline">
-          👥 Team &amp; access
-        </Link>
-        <Link href="/settings/approvals" className="hover:underline">
-          ✅ Approvals
-        </Link>
-      </div>
 
       {ministries.map((m) => {
         const inUse = m._count.events + m._count.requests + m._count.series > 0;

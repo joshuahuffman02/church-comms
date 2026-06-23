@@ -105,14 +105,14 @@ export default async function EditEvent({ params }: { params: Promise<{ id: stri
         <option value="leadership">Leadership</option>
       </select>
 
-      <label className="text-sm text-muted">Tier (changing this re-plans the schedule)</label>
+      <label className="text-sm text-muted">Audience — changing this rebuilds the promo schedule</label>
       <select name="tier" defaultValue={String(request.tier)} className="rounded-2xl border px-4 py-2">
-        <option value="1">Tier 1 — whole church</option>
-        <option value="2">Tier 2 — ministry</option>
-        <option value="3">Tier 3 — small group / leadership</option>
+        <option value="1">Whole church</option>
+        <option value="2">Ministry</option>
+        <option value="3">Small group / leadership</option>
       </select>
 
-      <label className="text-sm text-muted">Event date (changing this re-plans the schedule)</label>
+      <label className="text-sm text-muted">Event date — changing this redoes all the promo deadlines</label>
       <input
         name="eventStart"
         type="date"
@@ -121,6 +121,11 @@ export default async function EditEvent({ params }: { params: Promise<{ id: stri
         className="rounded-2xl border px-4 py-2"
       />
 
+      <details className="rounded-2xl border px-4 py-3">
+        <summary className="cursor-pointer select-none text-sm font-semibold text-muted">
+          More details (optional)
+        </summary>
+        <div className="mt-3 grid gap-3">
       <label className="text-sm text-muted">End date (optional)</label>
       <input
         name="eventEnd"
@@ -164,7 +169,7 @@ export default async function EditEvent({ params }: { params: Promise<{ id: stri
       />
 
       <label className="text-sm text-muted">
-        Registration closes (optional · ad schedule runs backward from this date)
+        Registration closes (optional — promo counts down to this date)
       </label>
       <input
         name="registrationClosesAt"
@@ -188,6 +193,8 @@ export default async function EditEvent({ params }: { params: Promise<{ id: stri
         placeholder="Internal notes"
         className="rounded-2xl border px-4 py-2"
       />
+        </div>
+      </details>
 
       <div className="flex items-center gap-3">
         <button className="rounded-full bg-ink text-white py-2 px-6 font-semibold">

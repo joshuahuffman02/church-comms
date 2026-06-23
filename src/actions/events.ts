@@ -90,6 +90,7 @@ export async function removeDeliverable(deliverableId: string) {
   revalidatePath(`/requests/${d.requestId}`);
   revalidatePath("/this-week");
   revalidatePath("/outputs");
+  revalidatePath("/assign");
 }
 
 /**
