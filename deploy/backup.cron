@@ -23,9 +23,9 @@ PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 # System-crontab variant (/etc/cron.d/church-comms) — note the extra user field:
 # 0 2 * * * comms cd "/srv/church-comms" && bash scripts/backup-db.sh >> backups/backup.log 2>&1
 
-# ── Planning Center sync every 30 minutes (only if CRON_SECRET is set) ───────
+# ── Daily Planning Center + calendar discovery (only if CRON_SECRET is set) ──
 # Pulls APPROVED PCO Calendar events down as Submitted requests. The endpoint
 # rejects requests without the secret, so this line is a no-op until you set
 # CRON_SECRET in .env AND substitute it below (or export it for cron).
 # Replace REPLACE_WITH_CRON_SECRET with the value of CRON_SECRET from .env.
-# */30 * * * * curl -fsS -H "Authorization: Bearer REPLACE_WITH_CRON_SECRET" http://localhost:3000/api/cron/sync-events >> /srv/church-comms/backups/pco-sync.log 2>&1
+# 0 6 * * * curl -fsS -H "Authorization: Bearer REPLACE_WITH_CRON_SECRET" http://localhost:3000/api/cron/sync-events >> /srv/church-comms/backups/calendar-sync.log 2>&1

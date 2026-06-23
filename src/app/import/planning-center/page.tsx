@@ -3,10 +3,9 @@ import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { db } from "@/lib/db";
 import { pcoConfigured, fetchUpcomingPcoEvents } from "@/lib/pco";
+import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
 import {
   buildExternalEventPreview,
-  configuredExternalCalendarSourceUrl,
-  configuredExternalCalendarUrl,
   fetchExternalCalendarEvents,
   type ExternalEventPreview,
 } from "@/lib/external-calendar";
@@ -128,8 +127,9 @@ async function loadExternalCalendarPreview(): Promise<{
   calendarUrl: string | null;
   errorMessage: string | null;
 }> {
-  const calendarUrl = configuredExternalCalendarUrl();
-  const sourceUrl = configuredExternalCalendarSourceUrl();
+  const calendar = await activeExternalCalendarConfig();
+  const calendarUrl = calendar.feedUrl;
+  const sourceUrl = calendar.sourceUrl;
   const today = atMidnight(new Date());
   const horizon = addDays(today, 180);
 
@@ -174,31 +174,41 @@ async function loadExternalCalendarPreview(): Promise<{
 function PcoSetupCard() {
   return (
     <div className="card-float p-6 bg-sky-bg/40">
-      <div className="text-lg font-bold mb-2">Connect Planning Center</div>
+      <div className="text-lg font-bold mb-2">Planning Center isn&apos;t connected yet</div>
       <p className="text-sm text-muted mb-4">
-        Add Planning Center API credentials to your <code>.env</code> file, then
-        restart the app. Upcoming events will appear here, ready to import.
+        Once it&apos;s connected, your approved Planning Center events show up here
+        automatically, ready to bring in. Connecting is a <b>one-time technical
+        setup</b> — if you&apos;re not sure how, send this page to whoever installed
+        the app for you.
       </p>
-      <div className="rounded-2xl border bg-white px-4 py-3 text-sm font-mono text-ink mb-4">
-        <div># Personal Access Token (HTTP Basic)</div>
-        <div>PCO_APP_ID=your-app-id</div>
-        <div>PCO_SECRET=your-secret</div>
-        <div className="mt-2"># ...or an OAuth bearer token</div>
-        <div>PCO_TOKEN=your-token</div>
-      </div>
-      <p className="text-sm text-muted">
-        Create credentials in the Planning Center developer console and read the API
-        docs at{" "}
-        <a
-          href="https://developer.planning.center/docs/#/overview/authentication"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="font-semibold underline"
-        >
-          api.planningcenteronline.com
-        </a>
-        . The integration reads upcoming Calendar events only.
-      </p>
+      <details className="rounded-2xl border bg-white px-4 py-3 text-sm">
+        <summary className="cursor-pointer font-semibold text-ink select-none">
+          Setup details for your tech helper
+        </summary>
+        <p className="text-muted mt-3">
+          Add Planning Center API credentials to the server&apos;s <code>.env</code>{" "}
+          file, then restart the app:
+        </p>
+        <div className="mt-2 rounded-xl border bg-sky-bg/50 px-4 py-3 font-mono text-ink">
+          <div># Personal Access Token (HTTP Basic)</div>
+          <div>PCO_APP_ID=your-app-id</div>
+          <div>PCO_SECRET=your-secret</div>
+          <div className="mt-2"># ...or an OAuth bearer token</div>
+          <div>PCO_TOKEN=your-token</div>
+        </div>
+        <p className="text-muted mt-3">
+          Create credentials in the Planning Center developer console —{" "}
+          <a
+            href="https://developer.planning.center/docs/#/overview/authentication"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold underline"
+          >
+            developer.planning.center
+          </a>
+          . The integration reads upcoming Calendar events only.
+        </p>
+      </details>
     </div>
   );
 }

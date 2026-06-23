@@ -4,6 +4,7 @@ import { getSessionUser } from "@/lib/authz";
 import { isAdmin, isEditor } from "@/lib/roles";
 import { atMidnight } from "@/lib/engine/dates";
 import { cadenceSummary, type SeriesLike } from "@/lib/recurrence";
+import { tierLabel, tierTitle } from "@/lib/labels";
 import { SeriesForm } from "@/components/series-form";
 import {
   GenerateNowButton,
@@ -117,8 +118,11 @@ export default async function RecurringPage() {
                     paused
                   </span>
                 )}
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-muted">
-                  Tier {r.tier}
+                <span
+                  title={tierTitle(r.tier)}
+                  className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-muted"
+                >
+                  {tierLabel(r.tier)}
                 </span>
               </div>
               <div className="text-sm text-muted mt-0.5">{r.cadence}</div>

@@ -107,5 +107,5 @@ export async function submitIntake(fd: FormData) {
     html: `<p>Hi ${safeName},</p><p>Thanks! We received your communication request <b>${safeTitle}</b>. The comms team reviews new requests Mon &amp; Thu.</p><p><a href="${link}">Track its status here</a>.</p>`,
   });
 
-  redirect("/status/" + statusToken);
+  redirect("/status/" + statusToken + "?new=1");
 }

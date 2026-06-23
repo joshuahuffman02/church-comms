@@ -2,11 +2,19 @@ import { db } from "@/lib/db";
 import { weekRange, bucketForDeliverable, comingSunday, loopChangesForSunday } from "@/lib/week";
 import { addDays } from "@/lib/engine/dates";
 import { ThisWeekBoard } from "@/components/this-week-board";
+import { WelcomeCard } from "@/components/welcome-card";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
+import { getSessionUser } from "@/lib/authz";
+import { isAdmin, isEditor } from "@/lib/roles";
 
 export default async function ThisWeek() {
   const today = new Date();
   const { start, end } = weekRange(today);
+
+  // First-run orientation: when the install has no events yet, greet the user
+  // with a setup checklist instead of an empty board that reads "all done".
+  const [user, eventCount] = await Promise.all([getSessionUser(), db.request.count()]);
+  const firstRun = eventCount === 0;
 
   const deliverables = await db.deliverable.findMany({
     where: { request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false } },
@@ -126,8 +134,17 @@ export default async function ThisWeek() {
   const top3Options = optionRows.map((r) => ({ id: r.id, title: r.title, date: r.eventStart }));
 
   return (
-    <ThisWeekBoard
-      make={make}
+    <>
+      {firstRun && (
+        <div className="max-w-3xl">
+          <WelcomeCard
+            admin={user ? isAdmin(user.roles) : false}
+            editor={user ? isEditor(user.roles) : false}
+          />
+        </div>
+      )}
+      <ThisWeekBoard
+        make={make}
       atRisk={atRisk}
       videoLocks={videoLocks}
       loopAdd={add}
@@ -137,9 +154,10 @@ export default async function ThisWeek() {
       standingTasks={standingTasks}
       top3Items={top3Items}
       top3Options={top3Options}
-      top3Sunday={sunday}
-      weekStart={start}
-      weekEnd={end}
-    />
+        top3Sunday={sunday}
+        weekStart={start}
+        weekEnd={end}
+      />
+    </>
   );
 }

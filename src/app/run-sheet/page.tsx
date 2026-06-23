@@ -100,7 +100,7 @@ export default async function RunSheetPage({
       {/* Header + controls (controls hidden on print via .no-print) */}
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-extrabold">Run Sheet 🗒️</h1>
+          <h1 className="text-2xl font-extrabold">Sunday Checklist 🗒️</h1>
           <p className="text-muted mt-0.5">
             Sunday {formatLong(sheet.sunday)}
             <span className="mx-2 text-slate-300">·</span>
@@ -134,7 +134,7 @@ export default async function RunSheetPage({
       {/* Print-only title — the on-screen header chrome is friendlier, but on
           paper we want a clean, unambiguous heading. */}
       <div className="rs-print-title hidden">
-        <h1>Run Sheet — Sunday {formatLong(sheet.sunday)}</h1>
+        <h1>Sunday Checklist — {formatLong(sheet.sunday)}</h1>
         <p>Week of {formatRange(sheet.weekStart, sheet.weekEnd)}</p>
       </div>
 

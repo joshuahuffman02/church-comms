@@ -209,11 +209,12 @@ export function groupCuratedOutputTouchesBySunday(
  */
 export async function curatedTouchesThisWeekForChannel(
   channel: CuratableChannel,
-  today: Date
+  today: Date,
+  preferred?: readonly string[],
 ): Promise<CuratedWeek> {
   const touches = await touchesThisWeekForChannel(channel.id, today);
   const cap = effectiveEventCap(channel);
-  const { live, held } = splitByWeeklyCap(touches, touchEventOf, cap);
+  const { live, held } = splitByWeeklyCap(touches, touchEventOf, cap, preferred);
   const liveEventCount = distinctRequestCount(live);
   return { live, held, liveEventCount, cap };
 }

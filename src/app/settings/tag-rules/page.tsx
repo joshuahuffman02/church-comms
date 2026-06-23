@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SettingsNav } from "@/components/settings-nav";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
@@ -54,9 +55,7 @@ export default async function TagRulesSettings() {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/settings/channels" className="text-sm text-muted hover:underline">
-        ← Settings
-      </Link>
+      <SettingsNav />
       <h1 className="text-2xl font-extrabold mb-2 mt-2">Tag rules 🏷️</h1>
       <p className="text-muted mb-5 leading-relaxed">
         Map a <b className="text-ink">Planning Center tag</b> to a{" "}
@@ -68,15 +67,14 @@ export default async function TagRulesSettings() {
         an event&apos;s tags wins); the comms team still confirms it at triage.{" "}
         <b className="text-ink">No promo</b> (a &ldquo;Room Only&rdquo; tag) keeps
         the event out of the comms queue. A{" "}
-        <b className="text-ink">suggested playbook</b> surfaces a one-click
+        <b className="text-ink">suggested checklist</b> surfaces a one-click
         &ldquo;apply this checklist?&rdquo; hint on a matching event (e.g. a
-        &ldquo;Sermon Series&rdquo; tag offers the Sermon Series playbook).
+        &ldquo;Sermon Series&rdquo; tag offers the Sermon Series checklist).
       </p>
 
       {rules.length === 0 && (
         <div className="card-float p-6 mb-4 text-center text-muted text-sm">
-          No tag rules yet. Add one below — or run the seed to load the default
-          tag vocabulary.
+          No tag rules yet — add one below to start sorting tagged events automatically.
         </div>
       )}
 
@@ -131,7 +129,7 @@ export default async function TagRulesSettings() {
           </label>
 
           <label className="text-sm text-muted">
-            Playbook
+            Checklist
             <select
               name="suggestedTemplateId"
               defaultValue={r.suggestedTemplateId ?? ""}
@@ -201,7 +199,7 @@ export default async function TagRulesSettings() {
             Mission trip
           </label>
           <label className="text-sm text-muted">
-            Playbook
+            Checklist
             <select name="suggestedTemplateId" defaultValue="" className={`${selectCls} ml-1`}>
               <option value="">— none —</option>
               {templates.map((t) => (
