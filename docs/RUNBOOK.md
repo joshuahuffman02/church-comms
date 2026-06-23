@@ -131,6 +131,42 @@ npm run build
 Read release notes before upgrading. Pay special attention to migration notes and
 any manual configuration changes.
 
+### In-App Updates
+
+Trusted local installs can expose the same safe upgrade flow at
+`Settings > Updates`.
+
+Keep it disabled unless the app is only reachable by trusted admins on a trusted
+machine:
+
+```bash
+ENABLE_APP_UPDATER=true
+UPDATE_REMOTE=origin
+UPDATE_BRANCH=main
+PM2_APP_NAME=comms
+# Optional:
+# UPDATE_RESTART_CMD="pm2 restart comms"
+```
+
+Admins can then check GitHub and run the update from the app. The updater only
+fast-forwards to the configured branch. If tracked local changes, local-only
+commits, or diverged history are present, it stops and asks for a manual update.
+
+The button runs:
+
+```bash
+npm run backup
+git pull --ff-only "$UPDATE_REMOTE" "$UPDATE_BRANCH"
+npm ci
+npm run prisma:generate
+npm run db:prepare
+npm run build
+pm2 restart "$PM2_APP_NAME" # or UPDATE_RESTART_CMD
+```
+
+The page may briefly disconnect during restart. Reload it after the process
+comes back up.
+
 ## Product Repo Vs Church Instance
 
 Keep the public GitHub repo generic. The live church instance should keep its

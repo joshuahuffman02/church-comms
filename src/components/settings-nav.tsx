@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/settings/ministries", label: "Ministries" },
   { href: "/settings/users", label: "Team & access" },
   { href: "/settings/connections", label: "Connections" },
+  { href: "/settings/updates", label: "Updates" },
   { href: "/settings/sprints", label: "Big pushes" },
   { href: "/settings/approvals", label: "Approvals" },
   { href: "/settings/tag-rules", label: "Tag rules" },

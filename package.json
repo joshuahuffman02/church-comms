@@ -21,6 +21,7 @@
     "test:watch": "vitest",
     "check": "npm run lint && npm test && npm run build",
     "backup": "bash scripts/backup-db.sh",
+    "update:production": "bash scripts/update-production.sh",
     "db:prepare": "tsx scripts/prepare-db.ts",
     "db:deploy": "prisma migrate deploy"
   },

@@ -14,6 +14,7 @@ const GROUPS: Group[] = [
       { href: "/settings/ministries", icon: "🎨", title: "Ministries", blurb: "The teams that request communications, and their colors." },
       { href: "/settings/users", icon: "👥", title: "Team & access", blurb: "Who can sign in, and what each person is allowed to do." },
       { href: "/settings/connections", icon: "🔌", title: "Connections", blurb: "Link Planning Center, email, and calendar files — and test them." },
+      { href: "/settings/updates", icon: "⬆️", title: "Updates", blurb: "Check GitHub and run safe app updates on trusted installs." },
     ],
   },
   {
