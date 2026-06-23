@@ -41,9 +41,9 @@ const daysBefore = (event: Date, d: Date | null) =>
   d ? Math.round((event.getTime() - d.getTime()) / 86400000) : null;
 
 export function ChannelRow({
-  channel, exampleEventKey, open, onToggle,
+  channel, exampleEventKey, exampleEventLabel, open, onToggle,
 }: {
-  channel: ChannelView; exampleEventKey: string; open: boolean; onToggle: () => void;
+  channel: ChannelView; exampleEventKey: string; exampleEventLabel: string | null; open: boolean; onToggle: () => void;
 }) {
   const { flash, ping } = useSaveFlash();
 
@@ -160,7 +160,10 @@ export function ChannelRow({
             </div>
             <div className="rounded-2xl bg-sky-bg px-4 py-3 text-xs text-ink/80">
               {preview.goesOut
-                ? <>For the next event, <b>{fmt(event)}</b> — artwork due <b>{fmt(preview.assetDue)}</b>, goes out <b>{fmt(preview.goesOut)}</b>.</>
+                ? <>{exampleEventLabel
+                      ? <>For your next event, <b>{exampleEventLabel}</b> on <b>{fmt(event)}</b> — </>
+                      : <>For an example event on <b>{fmt(event)}</b> — </>}
+                    artwork due <b>{fmt(preview.assetDue)}</b>, goes out <b>{fmt(preview.goesOut)}</b>.</>
                 : <>No posting day falls inside the promotion window — adjust the weekdays or “start promoting”.</>}
               {preview.goesOut && (
                 <div className="relative mt-3 h-2">

@@ -19,11 +19,15 @@ const WEEKDAYS = [
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** The upcoming Sunday (today if today is Sunday) — a stable example event for the preview. */
-function exampleEventKey(): string {
-  const d = atMidnight(new Date());
-  const ev = addDays(d, (7 - d.getDay()) % 7);
-  return `${ev.getFullYear()}-${pad(ev.getMonth() + 1)}-${pad(ev.getDate())}`;
+/** A Date -> "YYYY-MM-DD" key in church-local terms (never via toISOString). */
+function toDateKey(d: Date): string {
+  const m = atMidnight(d);
+  return `${m.getFullYear()}-${pad(m.getMonth() + 1)}-${pad(m.getDate())}`;
+}
+
+/** Fallback example when there are no upcoming events: the upcoming Sunday. */
+function nextSunday(today: Date): Date {
+  return addDays(today, (7 - today.getDay()) % 7);
 }
 
 type ChannelRecord = Awaited<ReturnType<typeof db.channel.findMany>>[number];
@@ -52,6 +56,18 @@ export default async function Channels() {
   const channels = await db.channel.findMany({ orderBy: { sortOrder: "asc" } });
   const views = channels.map(toView);
 
+  // Anchor the timing preview to the next real upcoming event (so the dates read
+  // true for this church's actual schedule), falling back to the next Sunday when
+  // there's nothing on the calendar yet.
+  const today = atMidnight(new Date());
+  const nextEvent = await db.request.findFirst({
+    where: { eventStart: { gte: today } },
+    orderBy: { eventStart: "asc" },
+    select: { eventStart: true, title: true },
+  });
+  const exampleEventKey = toDateKey(nextEvent ? nextEvent.eventStart : nextSunday(today));
+  const exampleEventLabel = nextEvent?.title ?? null;
+
   return (
     <div className="max-w-3xl">
       <SettingsNav />
@@ -63,7 +79,7 @@ export default async function Channels() {
         on once you’ve changed something.
       </p>
 
-      <ChannelList channels={views} exampleEventKey={exampleEventKey()} />
+      <ChannelList channels={views} exampleEventKey={exampleEventKey} exampleEventLabel={exampleEventLabel} />
 
       {/* ---- Add a new channel (unchanged) -------------------------------- */}
       <details className="card-float mt-6 p-4">
