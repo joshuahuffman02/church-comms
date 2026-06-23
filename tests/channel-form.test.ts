@@ -51,6 +51,19 @@ describe("parseChannelUpdate", () => {
     expect(r.data.cadence).toEqual({ weekdays: [0] });
   });
 
+  it("accepts single_weekday and writes its weekday cadence (no cap/lockLead)", () => {
+    const r = parseChannelUpdate(fd([
+      ["type", "single_weekday"], ["name", "Facebook"], ["offset", "14"], ["lead", "3"],
+      ["weekday", "5"], ["tier", "1"], ["capacity", ""],
+    ]));
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.type).toBe("single_weekday");
+    expect(r.data.cadence).toEqual({ weekdays: [5] });
+    expect("frequencyCap" in r.data).toBe(false);
+    expect("lockLeadDays" in r.data).toBe(false);
+  });
+
   it("clears optional numbers to null and reads lockLead for dated_instance", () => {
     const r = parseChannelUpdate(fd([
       ["type", "dated_instance"], ["name", "Service slide"], ["offset", "21"], ["lead", "7"],

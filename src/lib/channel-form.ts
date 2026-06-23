@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-export const CHANNEL_TYPES = ["windowed", "dated_instance", "one_shot"] as const;
+export const CHANNEL_TYPES = ["windowed", "dated_instance", "one_shot", "single_weekday"] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 
 function isChannelType(v: string): v is ChannelType {

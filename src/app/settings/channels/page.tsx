@@ -92,6 +92,7 @@ export default async function Channels() {
             <label className="text-sm font-semibold">Type
               <select name="type" defaultValue="windowed" className="ml-2 rounded-full border px-3 py-1 text-sm font-normal">
                 <option value="windowed">Runs for a while (over a span of days)</option>
+                <option value="single_weekday">Once, on a set weekday</option>
                 <option value="dated_instance">Happens once on a date</option>
                 <option value="one_shot">Sent once</option>
               </select>

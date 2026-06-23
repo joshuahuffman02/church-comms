@@ -33,4 +33,11 @@ describe("previewSchedule", () => {
     expect(r.goesOut).toBeNull();
     expect(r.assetDue).toBeNull();
   });
+
+  it("single_weekday posts on the chosen weekday on/before (event - offset)", () => {
+    const r = previewSchedule({ type: "single_weekday", offset: 14, lead: 3, weekdays: [5] }, event);
+    expect(ymd(r.goesOut)).toBe("2026-7-10"); // Fri on/before Jul 12
+    expect(r.goesOut!.getDay()).toBe(5);
+    expect(ymd(r.assetDue)).toBe("2026-7-7");
+  });
 });

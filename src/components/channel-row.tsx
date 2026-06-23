@@ -30,6 +30,7 @@ const WEEKDAYS = [
 ];
 const TYPE_LABELS: Record<string, string> = {
   windowed: "Runs over a span of days",
+  single_weekday: "Once, on a set weekday",
   dated_instance: "Happens once on a date",
   one_shot: "Sent once",
 };
@@ -93,6 +94,11 @@ export function ChannelRow({
     ? `goes out ${gDays} days before · artwork due ${aDays} days before`
     : "no posting day in the window — check the weekdays";
 
+  const offsetLabel =
+    type === "single_weekday" ? "Aim to post"
+    : type === "one_shot" ? "Post goes out"
+    : "Start promoting";
+
   return (
     <div className={`card-float mb-3 overflow-hidden ${open ? "ring-2 ring-sky-200" : ""}`}>
       <button
@@ -143,10 +149,14 @@ export function ChannelRow({
 
           <section className="mb-5">
             <h3 className="mb-1 text-sm font-bold text-ink">Timing rules</h3>
-            <p className="mb-3 text-xs text-muted">How early this channel starts, and how much lead time the team needs.</p>
+            <p className="mb-3 text-xs text-muted">
+              {type === "single_weekday"
+                ? "It posts once, on the day you pick under “Posting” below — on or before this many days out."
+                : "How early this channel starts, and how much lead time the team needs."}
+            </p>
             <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
               <label className="flex items-center gap-2">
-                <span className="w-44 text-ink">Start promoting</span>
+                <span className="w-44 text-ink">{offsetLabel}</span>
                 <input name="offset" inputMode="numeric" value={offset} onChange={(e) => setOffset(e.target.value)}
                   className="w-14 rounded-full border px-2 py-1 text-center" />
                 <span>days before the event</span>
@@ -155,7 +165,7 @@ export function ChannelRow({
                 <span className="w-44 text-ink">Artwork must be ready</span>
                 <input name="lead" inputMode="numeric" value={lead} onChange={(e) => setLead(e.target.value)}
                   className="w-14 rounded-full border px-2 py-1 text-center" />
-                <span>days before it starts</span>
+                <span>days before it goes out</span>
               </label>
             </div>
             <div className="rounded-2xl bg-sky-bg px-4 py-3 text-xs text-ink/80">

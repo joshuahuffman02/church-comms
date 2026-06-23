@@ -35,6 +35,12 @@ export function previewSchedule(input: PreviewInput, exampleEvent: Date): Previe
     const days = weekdaysBetween(subDays(event, offset), event, weekdays);
     goesOut = days.length ? days[days.length - 1] : null;
     effLead = input.lockLeadDays ?? lead;
+  } else if (input.type === "single_weekday") {
+    // The chosen weekday (default Friday) on/before the (event - offset) mark.
+    const wd = input.weekdays.length ? input.weekdays : [5];
+    const anchor = subDays(event, offset);
+    const days = weekdaysBetween(subDays(anchor, 6), anchor, wd);
+    goesOut = days.length ? days[days.length - 1] : null;
   } else {
     const days = weekdaysBetween(subDays(event, offset), event, weekdays);
     goesOut = days.length ? days[0] : null;
