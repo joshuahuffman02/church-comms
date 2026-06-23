@@ -556,11 +556,20 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
       {canEdit && (
         <div className="-mt-2 mb-4 pl-1">
-          <FeatureVideoButton
-            requestId={request.id}
-            sundayLabel={comingSundayLabel}
-            alreadyFeatured={featuredThisSunday}
-          />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <FeatureVideoButton
+              requestId={request.id}
+              sundayLabel={comingSundayLabel}
+              alreadyFeatured={featuredThisSunday}
+            />
+            <Link href="/this-week" className="text-sm font-semibold text-sky-700 hover:underline">
+              Manage this Sunday&apos;s video ({comingSundayLabel}) →
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            This Sunday&apos;s Top&nbsp;3 video lineup is set here — not by the &ldquo;Announcement
+            Video&rdquo; chip above (that just books a slide for this event).
+          </p>
         </div>
       )}
 

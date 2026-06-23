@@ -48,7 +48,7 @@ export function ChannelPicker({ channels, placements, requestId, canEdit }: {
             <button key={ch.id} type="button" disabled={!canEdit} onClick={() => toggle(ch.id)}
               className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold transition ${on ? "text-white" : "border border-slate-200 text-ink/70 hover:bg-sky-bg"} disabled:opacity-60`}
               style={on ? { background: ch.color } : undefined}>
-              <span>{ch.name}</span>
+              <span>{ch.name.replace(/\s*\(Top 3\)$/i, "")}</span>
               {on?.publishMs && <span className="opacity-90">· {fmt(on.publishMs)}</span>}
               {on && canEdit && <span aria-hidden>✕</span>}
             </button>

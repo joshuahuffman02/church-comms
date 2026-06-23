@@ -3,7 +3,7 @@ import { DeliverableStatusButton } from "@/components/deliverable-status-button"
 import { UpdateDoneButton } from "@/components/update-done-button";
 import { TaskDoneButton } from "@/components/task-done-button";
 import { StandingTaskDoneButton } from "@/components/standing-task-done-button";
-import { addTop3Item, removeTop3Item } from "@/actions/video-top3";
+import { addTop3Item, removeTop3Item, replaceTop3Item } from "@/actions/video-top3";
 import { KIND_LABEL } from "@/lib/updates";
 import { initials } from "@/lib/tasks";
 import { titleCase, taskSourceLabel } from "@/lib/labels";
@@ -265,6 +265,27 @@ function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item
           <div className="flex gap-2">
             <input name="label" placeholder="e.g. Camp Awesome staff needs" className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm" />
             <button type="submit" className="btn-primary shrink-0 text-sm">＋ Add</button>
+          </div>
+        </form>
+      )}
+      {full && options.length > 0 && (
+        <form action={replaceTop3Item} className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
+          <div className="text-muted text-xs">Full at 3 — swap one out in a single step:</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select name="removeId" defaultValue="" required className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm">
+              <option value="" disabled>— take off —</option>
+              {items.map((it) => (
+                <option key={it.id} value={it.id}>{it.title}</option>
+              ))}
+            </select>
+            <span className="text-muted text-xs">with</span>
+            <select name="requestId" defaultValue="" required className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm">
+              <option value="" disabled>— add event —</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>{o.title} ({fmt(o.date)})</option>
+              ))}
+            </select>
+            <button type="submit" className="btn-primary shrink-0 text-sm">Swap</button>
           </div>
         </form>
       )}

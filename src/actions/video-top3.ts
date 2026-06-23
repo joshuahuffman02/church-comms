@@ -16,6 +16,16 @@ function isoDay(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Refresh every surface that renders the Top-3 lineup after a pick changes. */
+function revalidateTop3Surfaces(): void {
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/outputs");
+  revalidatePath("/outputs/announcement_video");
+  revalidatePath("/exports");
+  revalidatePath("/guardrails");
+}
+
 /**
  * Feature an event on THIS coming Sunday's announcement video. Unlike a bare
  * Top-3 pick, this actually PUTS A SLIDE on that Sunday (so it shows on the
@@ -61,13 +71,8 @@ export async function featureOnComingVideo(requestId: string): Promise<void> {
     }
   }
 
-  revalidatePath("/this-week");
-  revalidatePath("/run-sheet");
-  revalidatePath("/outputs");
-  revalidatePath("/outputs/announcement_video");
-  revalidatePath("/exports");
+  revalidateTop3Surfaces();
   revalidatePath(`/requests/${requestId}`);
-  revalidatePath("/guardrails");
 }
 
 /**
@@ -98,11 +103,57 @@ export async function addTop3Item(fd: FormData) {
       label: requestId ? null : label,
     },
   });
-  revalidatePath("/this-week");
+  revalidateTop3Surfaces();
 }
 
 export async function removeTop3Item(id: string) {
   await requireEditor();
   await db.videoTop3Item.delete({ where: { id } });
-  revalidatePath("/this-week");
+  revalidateTop3Surfaces();
+}
+
+/**
+ * Swap one Top-3 pick for another in a single step: drop `removeId` and add the
+ * chosen event/label in the SAME slot (same Sunday + sortOrder), so curating a
+ * full 3/3 lineup doesn't require a separate remove-then-add. If the replacement
+ * event is already featured that Sunday, the target is simply removed (no dupe).
+ */
+export async function replaceTop3Item(fd: FormData) {
+  await requireEditor();
+  const removeId = String(fd.get("removeId") ?? "");
+  const requestId = ((fd.get("requestId") as string) || "").trim() || null;
+  const label = ((fd.get("label") as string) || "").trim().slice(0, LABEL_CAP) || null;
+  if (!removeId || (!requestId && !label)) return;
+
+  const target = await db.videoTop3Item.findUnique({
+    where: { id: removeId },
+    select: { sunday: true, sortOrder: true },
+  });
+  if (!target) return;
+
+  // Avoid creating a duplicate pick if the replacement event is already featured
+  // that Sunday — in that case just take the target off.
+  const dupe = requestId
+    ? await db.videoTop3Item.findFirst({
+        where: { sunday: target.sunday, requestId, NOT: { id: removeId } },
+        select: { id: true },
+      })
+    : null;
+
+  await db.$transaction([
+    db.videoTop3Item.delete({ where: { id: removeId } }),
+    ...(dupe
+      ? []
+      : [
+          db.videoTop3Item.create({
+            data: {
+              sunday: target.sunday,
+              sortOrder: target.sortOrder,
+              requestId: requestId ?? undefined,
+              label: requestId ? null : label,
+            },
+          }),
+        ]),
+  ]);
+  revalidateTop3Surfaces();
 }
