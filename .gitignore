@@ -12,6 +12,8 @@ next-env.d.ts
 
 # Environment
 .env
+.env.*
+!.env.example
 .env*.local
 
 # Database (SQLite lives on the server, never in git)
@@ -47,6 +49,8 @@ local-data/
 
 # Misc
 .vercel
+.playwright-cli/
+.playwright-mcp/
 *.tsbuildinfo
 coverage/
 tmp/
