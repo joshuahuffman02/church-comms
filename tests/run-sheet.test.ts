@@ -195,4 +195,4 @@ describe("groupTouchesByChannel", () => {
     ]);
     expect(video.items.map((i) => i.eventTitle)).not.toContain("Late Tier 2");
   });
-}
+});
