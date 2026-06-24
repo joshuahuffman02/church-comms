@@ -55,6 +55,10 @@ export type RunSheetItem = {
   done: boolean;
   /** The touch's scheduled date (church-local midnight). */
   date: Date;
+  /** The actual event day (church-local midnight). */
+  eventStart: Date;
+  /** Optional registration close/due date (church-local midnight). */
+  registrationClosesAt: Date | null;
 };
 
 export type RunSheetChannel = {
@@ -149,6 +153,7 @@ export type LoadedTouch = {
       id: string;
       tier: number;
       eventStart: Date;
+      registrationClosesAt: Date | null;
       title: string;
       nextStepText: string | null;
       ministries: { name: string; color: string }[];
@@ -195,6 +200,8 @@ function toItem(t: LoadedTouch): RunSheetItem {
     status: t.deliverable.status,
     done: t.status === "published",
     date: atMidnight(t.scheduledAt),
+    eventStart: atMidnight(req.eventStart),
+    registrationClosesAt: req.registrationClosesAt ? atMidnight(req.registrationClosesAt) : null,
   };
 }
 
