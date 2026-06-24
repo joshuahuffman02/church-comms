@@ -65,6 +65,19 @@ function ItemRow({ item }: { item: RunSheetItem }) {
         {item.detail !== item.eventTitle && (
           <p className="text-sm text-ink/80 mt-0.5">{item.detail}</p>
         )}
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
+          <span>
+            Event <span className="font-medium text-ink/75">{formatShort(item.eventStart)}</span>
+          </span>
+          {item.registrationClosesAt && (
+            <span>
+              Registration due{" "}
+              <span className="font-medium text-ink/75">
+                {formatShort(item.registrationClosesAt)}
+              </span>
+            </span>
+          )}
+        </div>
       </div>
     </li>
   );
