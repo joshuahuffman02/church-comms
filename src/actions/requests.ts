@@ -6,6 +6,7 @@ import { planEvent, toPrismaDeliverables } from "@/lib/engine/persist";
 import { parseDateInput } from "@/lib/engine/dates";
 import { ministryCreateData, ministryIdsFromForm } from "@/lib/ministries";
 import { activeChannelConfig, planningInputForRequest } from "@/lib/plan-service";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 const tierFor: Record<string, number> = { whole_church: 1, ministry: 2, small_group: 3, leadership: 3 };
@@ -18,6 +19,17 @@ function readField(fd: FormData, key: string, max: number): string | null {
   if (typeof raw !== "string") return null;
   const trimmed = raw.trim().slice(0, max);
   return trimmed ? trimmed : null;
+}
+
+function revalidateSchedules() {
+  revalidatePath("/requests");
+  revalidatePath("/pipeline");
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/outputs");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
 }
 
 export async function createRequest(fd: FormData) {
@@ -62,5 +74,6 @@ export async function createRequest(fd: FormData) {
     },
     user,
   );
+  revalidateSchedules();
   redirect("/this-week");
 }

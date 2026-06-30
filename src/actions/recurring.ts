@@ -21,10 +21,12 @@ function revalidateAll() {
   revalidatePath("/recurring");
   revalidatePath("/requests");
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/pipeline");
   revalidatePath("/outputs");
   revalidatePath("/guardrails");
+  revalidatePath("/assign");
 }
 
 /** Read a form field as a trimmed string, or undefined when blank. */

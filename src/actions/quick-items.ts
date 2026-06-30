@@ -114,8 +114,10 @@ export async function createQuickItem(fd: FormData) {
   revalidatePath("/outputs");
   revalidatePath(`/outputs/${channel.key}`);
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/requests");
+  revalidatePath("/guardrails");
 }
 
 /**
@@ -178,6 +180,9 @@ export async function attachChannel(requestId: string, fd: FormData) {
   revalidatePath("/outputs");
   revalidatePath(`/outputs/${channel.key}`);
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/guardrails");
   revalidatePath("/assign");
 }
 

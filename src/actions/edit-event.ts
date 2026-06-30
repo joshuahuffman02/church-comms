@@ -16,9 +16,11 @@ function revalidateEvent(id: string) {
   revalidatePath(`/requests/${id}`);
   revalidatePath("/requests");
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/outputs");
   revalidatePath("/guardrails");
+  revalidatePath("/assign");
 }
 
 /** Read a form field as a trimmed string, or undefined when blank. */

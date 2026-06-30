@@ -4,6 +4,7 @@ import { DeliverableRemoveButton } from "@/components/deliverable-remove-button"
 import { DeliverableOwner } from "@/components/deliverable-owner";
 import { DeliverableArtLink } from "@/components/deliverable-art-link";
 import { ProofActions } from "@/components/proof-actions";
+import { ScheduleLockButton } from "@/components/schedule-lock-button";
 import type { ActiveUser } from "@/components/owner-assign";
 
 export type DeliverableRow = {
@@ -18,7 +19,9 @@ export type DeliverableRow = {
   lockLeadDays: number | null;
   skippedReason: string | null;
   touchCount: number;
+  firstTouchId: string | null;
   firstTouchAt: Date | null;
+  firstTouchLockId: string | null;
   assetLink: string | null;
   effectiveOwnerId: string | null;
   effectiveOwnerName: string | null;
@@ -101,6 +104,13 @@ export function DeliverableList({
             <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted">
               <span>make by {fmt(d.productionDueAt)}</span>
               <span>publishes {fmt(d.firstTouchAt)}</span>
+              {canEdit && d.status !== "skipped" && d.firstTouchId && (
+                <ScheduleLockButton
+                  touchId={d.firstTouchId}
+                  lockId={d.firstTouchLockId}
+                  channelName={d.channelName}
+                />
+              )}
               {d.channelType === "dated_instance" && d.instanceDate && (
                 <span>
                   instance {fmt(d.instanceDate)}

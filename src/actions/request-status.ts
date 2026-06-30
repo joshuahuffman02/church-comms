@@ -16,6 +16,18 @@ import { revalidatePath } from "next/cache";
 const VALID_REQUEST_STATUSES = new Set<string>([...REQUEST_STATUSES, ...REQUEST_SIDE_STATUSES]);
 const VALID_DELIVERABLE_STATUSES = new Set<string>([...DELIVERABLE_STATUSES]);
 
+function revalidateRequestSchedule(id: string) {
+  revalidatePath(`/requests/${id}`);
+  revalidatePath("/requests");
+  revalidatePath("/pipeline");
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/outputs");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
+}
+
 export async function setRequestStatus(id: string, status: string) {
   const user = await requireEditor();
   if (!VALID_REQUEST_STATUSES.has(status)) throw new Error("Invalid status");
@@ -57,11 +69,7 @@ export async function setRequestStatus(id: string, status: string) {
         },
         user,
       );
-      revalidatePath(`/requests/${id}`);
-      revalidatePath("/requests");
-      revalidatePath("/pipeline");
-      revalidatePath("/this-week");
-      revalidatePath("/guardrails");
+      revalidateRequestSchedule(id);
       return;
     }
   }
@@ -78,7 +86,7 @@ export async function setRequestStatus(id: string, status: string) {
     user,
   );
   await notifyRequester(id, status);
-  revalidatePath(`/requests/${id}`); revalidatePath("/requests"); revalidatePath("/pipeline"); revalidatePath("/this-week");
+  revalidateRequestSchedule(id);
 }
 
 export async function advanceRequestStatus(id: string) {
@@ -107,5 +115,5 @@ export async function setDeliverableStatus(deliverableId: string, status: string
     },
     user,
   );
-  revalidatePath(`/requests/${d.requestId}`); revalidatePath("/this-week"); revalidatePath("/pipeline");
+  revalidateRequestSchedule(d.requestId);
 }

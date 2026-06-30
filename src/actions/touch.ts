@@ -60,5 +60,6 @@ export async function updateTouch(id: string, fd: FormData) {
   );
 
   revalidatePath("/outputs");
+  revalidatePath("/run-sheet");
   revalidatePath(`/requests/${touch.deliverable.requestId}`);
 }

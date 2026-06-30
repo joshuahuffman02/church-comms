@@ -23,6 +23,7 @@ function requestFiltersFromParams(params: SearchParams): RequestFilters {
     tier: firstParam(params.tier) || "all",
     ministry: firstParam(params.ministry) || "all",
     pco: firstParam(params.pco) || "all",
+    includePast: firstParam(params.past) === "1",
   };
 }
 
@@ -36,14 +37,18 @@ export default async function RequestsIndex({
   if (!user) redirect("/login");
   const canEdit = isEditor(user.roles);
   const today = atMidnight(new Date());
-  const requests = await db.request.findMany({
-    include: {
-      // Full ministry set (all equal), ordered for stable dot rendering.
-      ministries: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-      deliverables: true,
-    },
-    orderBy: { eventStart: "asc" },
-  });
+  const [requests, hiddenPastCount] = await Promise.all([
+    db.request.findMany({
+      where: initialFilters.includePast ? undefined : { eventStart: { gte: today } },
+      include: {
+        // Full ministry set (all equal), ordered for stable dot rendering.
+        ministries: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+        deliverables: true,
+      },
+      orderBy: { eventStart: "asc" },
+    }),
+    db.request.count({ where: { eventStart: { lt: today } } }),
+  ]);
 
   const rows: RequestRow[] = requests.map((r) => {
     const upcomingDue = r.deliverables
@@ -76,7 +81,12 @@ export default async function RequestsIndex({
           <UnlinkedPcoBanner />
         </Suspense>
       </div>
-      <RequestsTable rows={rows} initialFilters={initialFilters} canEdit={canEdit} />
+      <RequestsTable
+        rows={rows}
+        initialFilters={initialFilters}
+        hiddenPastCount={hiddenPastCount}
+        canEdit={canEdit}
+      />
     </>
   );
 }

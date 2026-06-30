@@ -10,6 +10,7 @@ import { RunSheetCheckbox } from "@/components/run-sheet-checkbox";
 import { UpdateDoneButton } from "@/components/update-done-button";
 import { MinistryDots } from "@/components/ministry-dots";
 import { KIND_LABEL } from "@/lib/updates";
+import Link from "next/link";
 
 // Reflects live DB state — render fresh each request.
 export const dynamic = "force-dynamic";
@@ -53,9 +54,12 @@ function ItemRow({ item }: { item: RunSheetItem }) {
       <RunSheetCheckbox touchId={item.touchId} done={item.done} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={`font-semibold text-ink ${item.done ? "line-through text-muted" : ""}`}>
+          <Link
+            href={`/requests/${item.requestId}`}
+            className={`font-semibold text-ink hover:text-sky-700 hover:underline ${item.done ? "line-through text-muted" : ""}`}
+          >
             {item.eventTitle}
-          </span>
+          </Link>
           {item.ministries.length > 0 && (
             <MinistryDots ministries={item.ministries} showNames className="text-xs" />
           )}
@@ -204,7 +208,12 @@ export default async function RunSheetPage({
                     {sheet.loopAdd.map((l) => (
                       <li key={l.touchId} className="rs-row flex items-start gap-2 py-1 text-sm">
                         <RunSheetCheckbox touchId={l.touchId} done={l.done} />
-                        <span className={`font-medium text-ink ${l.done ? "line-through text-muted" : ""}`}>{l.title}</span>
+                        <Link
+                          href={`/requests/${l.requestId}`}
+                          className={`font-medium text-ink hover:text-sky-700 hover:underline ${l.done ? "line-through text-muted" : ""}`}
+                        >
+                          {l.title}
+                        </Link>
                         {l.ministry && <span className="text-muted">· {l.ministry}</span>}
                       </li>
                     ))}
@@ -222,7 +231,12 @@ export default async function RunSheetPage({
                     {sheet.loopRemove.map((l) => (
                       <li key={l.touchId} className="rs-row flex items-start gap-2 py-1 text-sm">
                         <RunSheetCheckbox touchId={l.touchId} done={l.done} />
-                        <span className={`font-medium text-ink ${l.done ? "line-through text-muted" : ""}`}>{l.title}</span>
+                        <Link
+                          href={`/requests/${l.requestId}`}
+                          className={`font-medium text-ink hover:text-sky-700 hover:underline ${l.done ? "line-through text-muted" : ""}`}
+                        >
+                          {l.title}
+                        </Link>
                         {l.ministry && <span className="text-muted">· {l.ministry}</span>}
                       </li>
                     ))}
@@ -250,7 +264,12 @@ export default async function RunSheetPage({
                   <span className="rs-check text-muted mt-0.5" aria-hidden>☐</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-semibold text-ink">{e.title}</span>
+                      <Link
+                        href={`/requests/${e.requestId}`}
+                        className="font-semibold text-ink hover:text-sky-700 hover:underline"
+                      >
+                        {e.title}
+                      </Link>
                       {e.ministries.length > 0 && (
                         <MinistryDots ministries={e.ministries} showNames className="text-xs" />
                       )}
@@ -286,9 +305,12 @@ export default async function RunSheetPage({
                   <UpdateDoneButton id={u.id} done={u.done} />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className={`font-semibold text-ink ${u.done ? "line-through text-muted" : ""}`}>
+                      <Link
+                        href={`/requests/${u.requestId}`}
+                        className={`font-semibold text-ink hover:text-sky-700 hover:underline ${u.done ? "line-through text-muted" : ""}`}
+                      >
                         {u.eventTitle}
-                      </span>
+                      </Link>
                       <span className="text-muted">·</span>
                       <span className={u.done ? "line-through text-muted" : "text-ink"}>{u.title}</span>
                       {u.kind && KIND_LABEL[u.kind] && (

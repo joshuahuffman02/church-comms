@@ -26,6 +26,7 @@ import { isEditor } from "@/lib/roles";
 import { classifyByTags, type TagRule } from "@/lib/tag-rules";
 import { SuggestedPlaybook } from "@/components/suggested-playbook";
 import { pcoStatusLabel, tierLabel, tierTitle } from "@/lib/labels";
+import { scheduleLockKey } from "@/lib/schedule-locks";
 import Link from "next/link";
 
 const APPROVAL_STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -76,6 +77,9 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         },
         tasks: {
           orderBy: [{ dueAt: "asc" }, { sortOrder: "asc" }],
+        },
+        scheduleLocks: {
+          select: { id: true, requestId: true, channelId: true, scheduledAt: true },
         },
       },
     }),
@@ -143,11 +147,18 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
     .filter((p): p is { id: string; name: string } => p.name != null);
 
   const guardrails = await getGuardrailsForRequest(id);
+  const lockIdByPlacement = new Map(
+    request.scheduleLocks.map((lock) => [
+      scheduleLockKey(lock.requestId, lock.channelId, lock.scheduledAt),
+      lock.id,
+    ]),
+  );
 
   const rows: DeliverableRow[] = request.deliverables.map((d) => {
     const sortedTouches = [...d.touches].sort(
       (a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime()
     );
+    const firstTouch = sortedTouches[0] ?? null;
     // Effective owner: the deliverable's own owner, else the request's owner.
     const ownerId = effectiveOwnerId(d, request);
     const ownerName = d.owner?.name ?? request.owner?.name ?? null;
@@ -163,7 +174,11 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       lockLeadDays: d.channel.lockLeadDays,
       skippedReason: d.skippedReason,
       touchCount: d.touches.length,
-      firstTouchAt: sortedTouches[0]?.scheduledAt ?? null,
+      firstTouchId: firstTouch?.id ?? null,
+      firstTouchAt: firstTouch?.scheduledAt ?? null,
+      firstTouchLockId: firstTouch
+        ? lockIdByPlacement.get(scheduleLockKey(request.id, d.channelId, firstTouch.scheduledAt)) ?? null
+        : null,
       assetLink: d.assetLink,
       effectiveOwnerId: ownerId,
       effectiveOwnerName: ownerName,
