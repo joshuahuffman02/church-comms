@@ -94,7 +94,7 @@ export function PcoImportList({ events }: { events: PcoEventRow[] }) {
 
       <div className="card-float overflow-hidden">
         <div className="px-5 py-3 text-xs font-bold text-muted border-b border-slate-100">
-          Approved Planning Center events
+          Upcoming approved Planning Center events
         </div>
         {events.length === 0 && (
           <div className="px-5 py-6 text-muted text-sm">

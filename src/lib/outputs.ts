@@ -3,6 +3,7 @@ import { weekRange } from "@/lib/week";
 import { addDays } from "@/lib/engine/dates";
 import { effectiveEventCap, splitByWeeklyCap, type RankableEvent } from "@/lib/social-curation";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
+import { localDayKey } from "@/lib/schedule-locks";
 
 export const DEFAULT_OUTPUT_UPCOMING_WEEKS = 16;
 
@@ -124,7 +125,7 @@ export function groupOutputTouchesBySunday<T extends ScheduledOutputItem>(
   const groups = new Map<string, OutputWeekGroup<T>>();
   for (const touch of touches) {
     const sunday = weekRange(touch.scheduledAt).end;
-    const key = localDateKey(sunday);
+    const key = localDayKey(sunday);
     const existing = groups.get(key);
     if (existing) {
       existing.items.push(touch);
@@ -133,13 +134,6 @@ export function groupOutputTouchesBySunday<T extends ScheduledOutputItem>(
     }
   }
   return [...groups.values()].sort((a, b) => a.sunday.getTime() - b.sunday.getTime());
-}
-
-function localDateKey(d: Date) {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 /** The rankable event behind an output touch (for the weekly cap/curation). */
@@ -187,10 +181,12 @@ function distinctRequestCount(touches: readonly OutputTouch[]) {
 export function groupCuratedOutputTouchesBySunday(
   touches: readonly OutputTouch[],
   channel: Pick<CuratableChannel, "type" | "capacity" | "frequencyCap">,
+  preferredBySunday?: ReadonlyMap<string, readonly string[]>,
 ): CuratedOutputWeekGroup<OutputTouch>[] {
   const cap = effectiveEventCap(channel);
   return groupOutputTouchesBySunday(touches).map((group) => {
-    const { live, held } = splitByWeeklyCap(group.items, touchEventOf, cap);
+    const preferred = preferredBySunday?.get(localDayKey(group.sunday));
+    const { live, held } = splitByWeeklyCap(group.items, touchEventOf, cap, preferred);
     return {
       ...group,
       items: live,

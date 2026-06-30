@@ -39,7 +39,7 @@ export async function featureOnComingVideo(requestId: string): Promise<void> {
   const sunday = atMidnight(comingSunday(new Date()));
   const channel = await db.channel.findUnique({
     where: { key: "announcement_video" },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!channel) return;
 
@@ -58,6 +58,23 @@ export async function featureOnComingVideo(requestId: string): Promise<void> {
     fd.set("date", isoDay(sunday));
     await attachChannel(requestId, fd); // creates the dated_instance slide + touch
   }
+
+  // 1b. Lock the slide so future re-plans preserve the intentional placement.
+  await db.scheduleLock.upsert({
+    where: {
+      requestId_channelId_scheduledAt: {
+        requestId,
+        channelId: channel.id,
+        scheduledAt: sunday,
+      },
+    },
+    update: {},
+    create: {
+      requestId,
+      channelId: channel.id,
+      scheduledAt: sunday,
+    },
+  });
 
   // 2. Feature it (Top-3 order), respecting the cap of 3.
   const existingPick = await db.videoTop3Item.findFirst({

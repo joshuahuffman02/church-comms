@@ -31,6 +31,7 @@ export type RequestFilters = {
   tier: string;
   ministry: string;
   pco: string;
+  includePast: boolean;
 };
 
 const DEFAULT_FILTERS: RequestFilters = {
@@ -39,6 +40,7 @@ const DEFAULT_FILTERS: RequestFilters = {
   tier: "all",
   ministry: "all",
   pco: "all",
+  includePast: false,
 };
 
 const fmt = (ms: number | null) =>
@@ -101,6 +103,7 @@ function filtersFromSearchParams(params: URLSearchParams): RequestFilters {
     tier: params.get("tier") ?? "all",
     ministry: params.get("ministry") ?? "all",
     pco: params.get("pco") ?? "all",
+    includePast: params.get("past") === "1",
   };
 }
 
@@ -116,28 +119,41 @@ function sanitizeFilters(filters: RequestFilters, rows: RequestRow[]): RequestFi
     tier: filters.tier === "all" || tiers.has(filters.tier) ? filters.tier : "all",
     ministry: filters.ministry === "all" || ministries.has(filters.ministry) ? filters.ministry : "all",
     pco,
+    includePast: filters.includePast,
   };
 }
 
-function writeFiltersToUrl(filters: RequestFilters) {
-  if (typeof window === "undefined") return;
+function filtersToQuery(filters: RequestFilters): string {
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
   if (filters.status !== "all") params.set("status", filters.status);
   if (filters.tier !== "all") params.set("tier", filters.tier);
   if (filters.ministry !== "all") params.set("ministry", filters.ministry);
   if (filters.pco !== "all") params.set("pco", filters.pco);
-  const query = params.toString();
+  if (filters.includePast) params.set("past", "1");
+  return params.toString();
+}
+
+function writeFiltersToUrl(filters: RequestFilters) {
+  if (typeof window === "undefined") return;
+  const query = filtersToQuery(filters);
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
+}
+
+function hrefForFilters(filters: RequestFilters) {
+  const query = filtersToQuery(filters);
+  return `/requests${query ? `?${query}` : ""}`;
 }
 
 export function RequestsTable({
   rows,
   initialFilters = DEFAULT_FILTERS,
+  hiddenPastCount = 0,
   canEdit,
 }: {
   rows: RequestRow[];
   initialFilters?: RequestFilters;
+  hiddenPastCount?: number;
   canEdit: boolean;
 }) {
   const [filters, setFilters] = useState<RequestFilters>(() => sanitizeFilters(initialFilters, rows));
@@ -165,7 +181,7 @@ export function RequestsTable({
   }
 
   function clearFilters() {
-    const next = DEFAULT_FILTERS;
+    const next = { ...DEFAULT_FILTERS, includePast: filters.includePast };
     writeFiltersToUrl(next);
     setFilters(next);
   }
@@ -186,11 +202,25 @@ export function RequestsTable({
         (filters.pco === "linked" && r.pcoLinked) ||
         (filters.pco === "unlinked" && !r.pcoLinked))
   );
+  const scopeLabel = filters.includePast ? "all events" : "upcoming events";
+  const togglePastHref = hrefForFilters({ ...filters, includePast: !filters.includePast });
 
   return (
     <div className="max-w-5xl">
       <h1 className="text-2xl font-extrabold mb-1">Events 📋</h1>
-      <p className="text-muted mb-5">{rows.length} requests · all events at a glance</p>
+      <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="text-muted">
+          {rows.length} {scopeLabel} at a glance
+        </p>
+        <Link href={togglePastHref} className="text-sm font-semibold text-sky-700 hover:underline">
+          {filters.includePast ? "Hide past events" : "Show past events"}
+        </Link>
+        {!filters.includePast && hiddenPastCount > 0 && (
+          <span className="text-xs text-muted">
+            {hiddenPastCount} past {hiddenPastCount === 1 ? "event is" : "events are"} hidden
+          </span>
+        )}
+      </div>
 
       <div className="card-float p-4 mb-4 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[220px]">
@@ -271,8 +301,16 @@ export function RequestsTable({
         </div>
         {filtered.length === 0 && rows.length === 0 && (
           <div className="px-5 py-8 text-center text-sm">
-            <p className="font-semibold text-ink">No events yet</p>
-            <p className="text-muted mt-1">Events show up here once you add or import them.</p>
+            <p className="font-semibold text-ink">
+              {filters.includePast ? "No events yet" : "No upcoming events"}
+            </p>
+            <p className="text-muted mt-1">
+              {filters.includePast
+                ? "Events show up here once you add or import them."
+                : hiddenPastCount > 0
+                  ? "Past events are hidden by default."
+                  : "Upcoming events show up here once you add or import them."}
+            </p>
             {canEdit && (
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 <Link href="/requests/new" className="btn-primary rounded-full px-4 py-2 text-sm font-semibold">
@@ -284,6 +322,14 @@ export function RequestsTable({
                 >
                   Import from Planning Center
                 </Link>
+                {!filters.includePast && hiddenPastCount > 0 && (
+                  <Link
+                    href={togglePastHref}
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-ink/80 hover:bg-sky-bg"
+                  >
+                    Show past events
+                  </Link>
+                )}
               </div>
             )}
           </div>

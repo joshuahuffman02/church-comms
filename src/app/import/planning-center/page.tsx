@@ -83,7 +83,7 @@ export default async function PlanningCenterImport() {
     <div className="max-w-4xl">
       <h1 className="text-2xl font-extrabold mb-1">Import from Planning Center 🗓️</h1>
       <p className="text-muted mb-1">
-        These are the <span className="font-semibold">approved</span> Planning Center
+        These are the <span className="font-semibold">upcoming approved</span> Planning Center
         events. Importing one creates a request at{" "}
         <span className="font-semibold">submitted</span> as tier 2 — re-tier and plan it
         at triage. (A scheduled sync also pulls approved events in automatically.)

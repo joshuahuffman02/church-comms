@@ -152,6 +152,18 @@ describe("groupTouchesByChannel", () => {
     expect(item.registrationClosesAt).toEqual(registrationClosesAt);
   });
 
+  it("carries the owning request id so run-sheet rows can link to the event", () => {
+    const weekTouches = [
+      touch("link-row", "ch_social", sunday, {
+        title: "Open Me",
+        requestId: "request-open-me",
+      }),
+    ];
+
+    const item = groupTouchesByChannel(channels, weekTouches, sunday).find((c) => c.key === "social")!.items[0];
+    expect(item.requestId).toBe("request-open-me");
+  });
+
   it("returns an empty item list for a channel with no touches that week", () => {
     const out = groupTouchesByChannel(channels, [], sunday);
     expect(out.every((c) => c.items.length === 0)).toBe(true);

@@ -5,6 +5,7 @@ import { activeUpdateAt, type EventUpdateLite } from "@/lib/updates";
 import { effectiveEventCap, splitByWeeklyCap, type RankableEvent } from "@/lib/social-curation";
 import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
+import { preferredLockedRequestIds } from "@/lib/schedule-locks";
 
 // ---------------------------------------------------------------------------
 // Weekly printable run-sheet builder.
@@ -36,6 +37,8 @@ export type MinistryRef = { name: string; color: string };
 export type RunSheetItem = {
   /** Touch id — stable key for the rendered checkbox row. */
   touchId: string;
+  /** Owning event id, for opening the event from the checklist. */
+  requestId: string;
   /** Owning event title. */
   eventTitle: string;
   /** Primary ministry name + color (first of the set), if the event has any. */
@@ -74,6 +77,7 @@ export type RunSheetChannel = {
 
 export type RunSheetLoopChange = {
   touchId: string;
+  requestId: string;
   title: string;
   ministry: string | null;
   done: boolean;
@@ -184,6 +188,17 @@ function loadedTouchEvent(t: LoadedTouch): RankableEvent {
   };
 }
 
+function uniqueIds(ids: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 /** Reshape a loaded touch into a clean run-sheet row. */
 function toItem(t: LoadedTouch): RunSheetItem {
   const req = t.deliverable.request;
@@ -192,6 +207,7 @@ function toItem(t: LoadedTouch): RunSheetItem {
   const ministries = req.ministries.map((m) => ({ name: m.name, color: m.color }));
   return {
     touchId: t.id,
+    requestId: req.id,
     eventTitle: req.title,
     ministry: ministries[0]?.name ?? null,
     ministryColor: ministries[0]?.color ?? null,
@@ -219,6 +235,7 @@ export function groupTouchesByChannel(
   weekTouches: LoadedTouch[],
   sunday: Date,
   avPreferred?: readonly string[],
+  preferredByChannelId?: ReadonlyMap<string, readonly string[]>,
 ): RunSheetChannel[] {
   const s = atMidnight(sunday);
   const sundayNext = addDays(s, 1); // half-open upper bound for "on Sunday"
@@ -241,8 +258,11 @@ export function groupTouchesByChannel(
     // Capped channels: the run sheet is the production doc, so only the events
     // that make the cap appear — held items drop off.
     const cap = effectiveEventCap(c);
-    // The announcement video features the hand-picked Top-3 (then fills).
-    const preferred = c.key === "announcement_video" ? avPreferred : undefined;
+    // Locked events stay first; the announcement video then honors Top-3 picks.
+    const preferred = uniqueIds([
+      ...(preferredByChannelId?.get(c.id) ?? []),
+      ...(c.key === "announcement_video" ? avPreferred ?? [] : []),
+    ]);
     const relevant = cap
       ? splitByWeeklyCap(windowed, loadedTouchEvent, cap, preferred).live
       : windowed;
@@ -297,8 +317,27 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     ],
   })) as unknown as LoadedTouch[];
 
+  const scheduleLocks = await db.scheduleLock.findMany({
+    where: { scheduledAt: { gte: weekStart, lt: weekUpper } },
+    select: { channelId: true, requestId: true, scheduledAt: true },
+    orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
+  });
+  const preferredByChannelId = new Map<string, string[]>();
+  for (const channel of channels) {
+    const locked = scheduleLocks.filter((lock) => lock.channelId === channel.id);
+    if (locked.length > 0) {
+      preferredByChannelId.set(channel.id, preferredLockedRequestIds(locked));
+    }
+  }
+
   const avPreferred = pickedRequestIds(await loadSundayTop3(sunday));
-  const runChannels = groupTouchesByChannel(channels, weekTouches, sunday, avPreferred);
+  const runChannels = groupTouchesByChannel(
+    channels,
+    weekTouches,
+    sunday,
+    avPreferred,
+    preferredByChannelId,
+  );
 
   // Loop add/remove: the loop channel's touches around this Sunday vs last.
   // loopChangesForSunday compares the touch date to the Sunday (add) and the
@@ -324,6 +363,7 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
       scheduledAt: atMidnight(t.scheduledAt),
       done: t.status === "published",
       request: {
+        id: t.deliverable.request.id,
         title: t.deliverable.request.title,
         ministry: t.deliverable.request.ministries[0]?.name ?? null,
       },
@@ -334,6 +374,7 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     ): RunSheetLoopChange[] =>
       list.map((t) => ({
         touchId: t.touchId,
+        requestId: t.request.id,
         title: t.request.title,
         ministry: t.request.ministry,
         done: t.done,
