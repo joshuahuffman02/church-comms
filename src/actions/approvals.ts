@@ -14,7 +14,11 @@ function revalidateApproval(requestId: string) {
   revalidatePath("/requests");
   revalidatePath("/pipeline");
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/outputs");
   revalidatePath("/guardrails");
+  revalidatePath("/assign");
 }
 
 /**

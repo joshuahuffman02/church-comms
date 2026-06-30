@@ -5,15 +5,26 @@ import { DELIVERABLE_STATUS_META } from "@/lib/status";
 import {
   curatedTouchesThisWeekForChannel,
   groupCuratedOutputTouchesBySunday,
+  outputUpcomingRange,
   upcomingTouchesForChannel,
   type OutputTouch,
 } from "@/lib/outputs";
 import { TouchRemoveButton } from "@/components/touch-remove-button";
 import { TouchContentEditor } from "@/components/touch-content-editor";
+import { ScheduleLockButton } from "@/components/schedule-lock-button";
 import { MinistryDots } from "@/components/ministry-dots";
 import { phaseLabel } from "@/lib/labels";
-import { comingSunday } from "@/lib/week";
+import { comingSunday, weekRange } from "@/lib/week";
 import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
+import {
+  localDayKey,
+  preferredLockedRequestIds,
+  scheduleLockKey,
+  scheduleLockLookup,
+  scheduleLocksForChannelRange,
+  type ScheduleLockLite,
+} from "@/lib/schedule-locks";
+import { addDays } from "@/lib/engine/dates";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -37,16 +48,43 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
+function uniqueIds(ids: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+function preferredLocksByOutputSunday(locks: readonly ScheduleLockLite[]): Map<string, string[]> {
+  const grouped = new Map<string, string[]>();
+  const seenBySunday = new Map<string, Set<string>>();
+  for (const lock of locks) {
+    const sunday = localDayKey(weekRange(lock.scheduledAt).end);
+    const seen = seenBySunday.get(sunday) ?? new Set<string>();
+    if (seen.has(lock.requestId)) continue;
+    seen.add(lock.requestId);
+    seenBySunday.set(sunday, seen);
+    grouped.set(sunday, [...(grouped.get(sunday) ?? []), lock.requestId]);
+  }
+  return grouped;
+}
+
 function TouchRow({
   t,
   muted,
   channelName,
   editable,
+  lockId,
 }: {
   t: OutputTouch;
   muted?: boolean;
   channelName?: string;
   editable?: boolean;
+  lockId?: string | null;
 }) {
   const req = t.deliverable.request;
   const ministries = req.ministries.map((m) => ({ name: m.name, color: m.color }));
@@ -67,6 +105,13 @@ function TouchRow({
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-muted" title="When it's on this output">on {fmt(t.scheduledAt)}</span>
           <StatusChip status={t.deliverable.status} />
+          {channelName && (
+            <ScheduleLockButton
+              touchId={t.id}
+              lockId={lockId}
+              channelName={channelName}
+            />
+          )}
           {channelName && <TouchRemoveButton id={t.id} channelName={channelName} />}
         </div>
       </div>
@@ -93,17 +138,38 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
   const today = new Date();
   // For the announcement video, the hand-picked Top-3 is the featured (live) set
   // this week; everything else over the cap shows as "held".
-  const preferred =
+  const currentWeek = weekRange(today);
+  const upcomingRange = outputUpcomingRange(today);
+  const scheduleLocks = await scheduleLocksForChannelRange(
+    channel.id,
+    currentWeek.start,
+    upcomingRange.end,
+  );
+  const currentWeekEndExclusive = addDays(currentWeek.end, 1);
+  const currentLocks = scheduleLocks.filter((lock) => lock.scheduledAt < currentWeekEndExclusive);
+  const top3Preferred =
     channel.key === "announcement_video"
       ? pickedRequestIds(await loadSundayTop3(comingSunday(today)))
       : undefined;
+  const preferred = uniqueIds([
+    ...preferredLockedRequestIds(currentLocks),
+    ...(top3Preferred ?? []),
+  ]);
   const [week, upcoming] = await Promise.all([
     curatedTouchesThisWeekForChannel(channel, today, preferred),
     upcomingTouchesForChannel(channel.id, today),
   ]);
   const { live, held, liveEventCount, cap } = week;
-  const upcomingGroups = groupCuratedOutputTouchesBySunday(upcoming, channel);
+  const lockIdByPlacement = scheduleLockLookup(scheduleLocks);
+  const preferredBySunday = preferredLocksByOutputSunday(
+    scheduleLocks.filter((lock) => lock.scheduledAt >= upcomingRange.start),
+  );
+  const upcomingGroups = groupCuratedOutputTouchesBySunday(upcoming, channel, preferredBySunday);
   const upcomingCount = upcomingGroups.reduce((sum, group) => sum + group.items.length, 0);
+  const lockIdFor = (touch: OutputTouch) =>
+    lockIdByPlacement.get(
+      scheduleLockKey(touch.deliverable.request.id, touch.channelId, touch.scheduledAt),
+    ) ?? null;
 
   return (
     <div className="max-w-3xl">
@@ -138,7 +204,7 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
         {live.length === 0 ? (
           <div className="text-muted text-sm">Nothing scheduled on this output this week.</div>
         ) : (
-          live.map(t => <TouchRow key={t.id} t={t} channelName={channel.name} editable />)
+          live.map(t => <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} editable />)
         )}
 
         {held.length > 0 && (
@@ -152,7 +218,7 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
               into the live set as their event date nears — or add one explicitly elsewhere.
             </p>
             {held.map((t) => (
-              <TouchRow key={t.id} t={t} muted />
+              <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} muted />
             ))}
           </details>
         )}
@@ -171,7 +237,7 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
                 <div className="mb-1 text-xs font-extrabold text-muted">
                   For {fmtSunday(group.sunday)}
                 </div>
-                {group.items.map(t => <TouchRow key={t.id} t={t} muted />)}
+                {group.items.map(t => <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} muted />)}
                 {group.held.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-semibold text-muted select-none">
@@ -180,7 +246,7 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
                     </summary>
                     <div className="mt-1">
                       {group.held.map((t) => (
-                        <TouchRow key={t.id} t={t} muted />
+                        <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} muted />
                       ))}
                     </div>
                   </details>
