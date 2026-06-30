@@ -6,6 +6,16 @@ import { parseChannelUpdate } from "@/lib/channel-form";
 
 const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot"]);
 
+function revalidateChannelSurfaces() {
+  revalidatePath("/settings/channels");
+  revalidatePath("/outputs");
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
+}
+
 export interface ChannelActionState {
   ok: boolean;
   error?: string;
@@ -58,8 +68,7 @@ export async function updateChannel(
     return { ok: false, error: "Couldn’t save — that channel may no longer exist." };
   }
 
-  revalidatePath("/settings/channels");
-  revalidatePath("/outputs");
+  revalidateChannelSurfaces();
   return { ok: true, savedAt: Date.now() };
 }
 
@@ -120,7 +129,7 @@ export async function createChannel(fd: FormData) {
     },
   });
 
-  revalidatePath("/settings/channels");
+  revalidateChannelSurfaces();
 }
 
 /**
@@ -134,5 +143,5 @@ export async function deleteChannel(id: string) {
   await requireAdmin();
   await db.deliverable.deleteMany({ where: { channelId: id } });
   await db.channel.delete({ where: { id } });
-  revalidatePath("/settings/channels");
+  revalidateChannelSurfaces();
 }

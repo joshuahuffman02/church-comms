@@ -17,6 +17,7 @@ model User {
   requested     Request[]      @relation("requester")
   owned         Request[]      @relation("owner")
   ownedDeliverables Deliverable[] @relation("deliverableOwner")
+  createdScheduleLocks ScheduleLock[] @relation("scheduleLockCreator")
   approvalRules ApprovalRule[]
   approvals     Approval[]
   activityLogs  ActivityLog[]
@@ -121,6 +122,7 @@ model Channel {
   productionNotes          String?
   deliverables             Deliverable[]
   touches                  Touch[]
+  scheduleLocks            ScheduleLock[]
 }
 
 model Request {
@@ -194,6 +196,7 @@ model Request {
   updates              EventUpdate[]
   tasks                EventTask[]
   videoTop3            VideoTop3Item[]
+  scheduleLocks        ScheduleLock[]
 
   @@index([seriesId])
 }
@@ -447,6 +450,27 @@ model Touch {
   content       String?
   assetLink     String?
   note          String?
+}
+
+/// A staff-pinned event/channel/date placement. Locks are independent of
+/// generated Deliverables/Touches so a schedule rebuild can delete and recreate
+/// planned work while keeping intentional placements in place.
+model ScheduleLock {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  scheduledAt DateTime
+  note        String?
+  createdById String?
+  createdBy   User?    @relation("scheduleLockCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([requestId, channelId, scheduledAt])
+  @@index([channelId, scheduledAt])
+  @@index([requestId])
+  @@index([createdById])
 }
 
 model Setting {

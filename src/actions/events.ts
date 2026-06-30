@@ -2,16 +2,19 @@
 import { db } from "@/lib/db";
 import { requireAdmin, requireEditor } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
+import { atMidnight } from "@/lib/engine/dates";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 /** Paths that surface scheduled work and need refreshing after a change. */
 function revalidateSchedules() {
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/pipeline");
   revalidatePath("/guardrails");
   revalidatePath("/outputs");
+  revalidatePath("/assign");
 }
 
 /**
@@ -27,13 +30,14 @@ export async function cancelEvent(id: string) {
   });
   if (!req) throw new Error("Request not found");
   await db.request.update({ where: { id }, data: { status: "cancelled" } });
+  const removedLocks = await db.scheduleLock.deleteMany({ where: { requestId: id } });
   await db.deliverable.deleteMany({ where: { requestId: id } });
   await logRequestActivity(
     {
       requestId: id,
       action: "request_cancelled",
       summary: `Cancelled ${req.title} and removed scheduled items`,
-      metadata: { fromStatus: req.status, removedDeliverables: req._count.deliverables },
+      metadata: { fromStatus: req.status, removedDeliverables: req._count.deliverables, removedLocks: removedLocks.count },
     },
     user,
   );
@@ -74,23 +78,43 @@ export async function deleteEvent(id: string) {
  */
 export async function removeDeliverable(deliverableId: string) {
   const user = await requireEditor();
-  const d = await db.deliverable.delete({
+  const existing = await db.deliverable.findUnique({
     where: { id: deliverableId },
-    select: { requestId: true, channel: { select: { name: true } }, status: true },
+    select: {
+      requestId: true,
+      channelId: true,
+      channel: { select: { name: true } },
+      status: true,
+      touches: { select: { scheduledAt: true } },
+    },
   });
+  if (!existing) throw new Error("Deliverable not found");
+  const [removedLocks] = await db.$transaction([
+    db.scheduleLock.deleteMany({
+      where: {
+        requestId: existing.requestId,
+        channelId: existing.channelId,
+        scheduledAt: { in: existing.touches.map((touch) => atMidnight(touch.scheduledAt)) },
+      },
+    }),
+    db.deliverable.delete({ where: { id: deliverableId } }),
+  ]);
   await logRequestActivity(
     {
-      requestId: d.requestId,
+      requestId: existing.requestId,
       action: "deliverable_removed",
-      summary: `Removed ${d.channel.name} from this event`,
-      metadata: { deliverableId, channelName: d.channel.name, status: d.status },
+      summary: `Removed ${existing.channel.name} from this event`,
+      metadata: {
+        deliverableId,
+        channelName: existing.channel.name,
+        status: existing.status,
+        removedLocks: removedLocks.count,
+      },
     },
     user,
   );
-  revalidatePath(`/requests/${d.requestId}`);
-  revalidatePath("/this-week");
-  revalidatePath("/outputs");
-  revalidatePath("/assign");
+  revalidatePath(`/requests/${existing.requestId}`);
+  revalidateSchedules();
 }
 
 /**
@@ -98,23 +122,39 @@ export async function removeDeliverable(deliverableId: string) {
  */
 export async function removeTouch(touchId: string) {
   const user = await requireEditor();
-  const t = await db.touch.delete({
+  const existing = await db.touch.findUnique({
     where: { id: touchId },
     select: {
+      channelId: true,
       scheduledAt: true,
       deliverable: { select: { requestId: true, channel: { select: { name: true } } } },
     },
   });
+  if (!existing) throw new Error("Touch not found");
+  const [removedLocks] = await db.$transaction([
+    db.scheduleLock.deleteMany({
+      where: {
+        requestId: existing.deliverable.requestId,
+        channelId: existing.channelId,
+        scheduledAt: atMidnight(existing.scheduledAt),
+      },
+    }),
+    db.touch.delete({ where: { id: touchId } }),
+  ]);
   await logRequestActivity(
     {
-      requestId: t.deliverable.requestId,
+      requestId: existing.deliverable.requestId,
       action: "touch_removed",
-      summary: `Removed one ${t.deliverable.channel.name} appearance`,
-      metadata: { touchId, channelName: t.deliverable.channel.name, scheduledAt: t.scheduledAt.toISOString() },
+      summary: `Removed one ${existing.deliverable.channel.name} appearance`,
+      metadata: {
+        touchId,
+        channelName: existing.deliverable.channel.name,
+        scheduledAt: existing.scheduledAt.toISOString(),
+        removedLocks: removedLocks.count,
+      },
     },
     user,
   );
-  revalidatePath(`/requests/${t.deliverable.requestId}`);
-  revalidatePath("/this-week");
-  revalidatePath("/outputs");
+  revalidatePath(`/requests/${existing.deliverable.requestId}`);
+  revalidateSchedules();
 }
