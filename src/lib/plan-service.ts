@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
 import { planEvent, toPrismaDeliverables } from "@/lib/engine/persist";
 import { atMidnight, maxDate, minDate, phaseFor, subDays } from "@/lib/engine/dates";
+import { applySchedulePresetPlacementsToPlan, schedulePresetPlacements } from "@/lib/schedule-presets";
+import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
+import { schedulePresetsForTags } from "@/lib/tag-rules";
 import type { ComputeOptions } from "@/lib/engine/timeline";
 import type { ChannelConfig, ComputedDeliverable, ComputedTouch, EventInput } from "@/lib/engine/types";
 
@@ -33,6 +36,12 @@ function channelConfigFromRow(c: ChannelConfigRow): ChannelConfig {
     capacity: c.capacity ?? undefined,
     tierEligibility: c.tierEligibility as number[],
   };
+}
+
+function tagNames(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+    : [];
 }
 
 /** Build the engine channel config from active DB channels. */
@@ -212,18 +221,28 @@ export function applyScheduleLocksToPlan(
 async function buildDeliverablesForRequest(requestId: string, opts?: ComputeOptions): Promise<number> {
   const req = await db.request.findUnique({ where: { id: requestId } });
   if (!req) throw new Error("Request not found");
-  const [{ cfg, idByKey }, locks] = await Promise.all([
+  const [{ cfg, idByKey }, locks, presetRules] = await Promise.all([
     activeChannelConfig(),
     db.scheduleLock.findMany({
       where: { requestId, channel: { active: true } },
       include: { channel: true },
       orderBy: { scheduledAt: "asc" },
     }),
+    db.eventTagRule.findMany({
+      where: { schedulePreset: { not: null } },
+      orderBy: { sortOrder: "asc" },
+      select: { tag: true, schedulePreset: true },
+    }),
   ]);
   const input = planningInputForRequest(req);
+  const presets = schedulePresetsForTags(tagNames(req.pcoTags), presetRules);
+  const presetPlan = applySchedulePresetPlacementsToPlan(
+    planEvent(input, cfg, new Date(), opts),
+    schedulePresetPlacements(input, cfg, presets),
+  );
   const plan = applyScheduleLocksToPlan(
     input,
-    planEvent(input, cfg, new Date(), opts),
+    presetPlan,
     locks.map((lock) => ({
       scheduledAt: lock.scheduledAt,
       channel: channelConfigFromRow(lock.channel),
@@ -256,4 +275,31 @@ export async function generateDeliverablesForRequest(requestId: string): Promise
 export async function replanRequest(requestId: string, opts?: ComputeOptions): Promise<number> {
   await db.deliverable.deleteMany({ where: { requestId } });
   return buildDeliverablesForRequest(requestId, opts);
+}
+
+/**
+ * Re-plan all upcoming events whose status means they should have scheduled
+ * work. Use after channel settings change so newly enabled channels backfill
+ * existing approved events, and disabled/timing-changed channels are removed or
+ * recalculated without touching already-past event history.
+ */
+export async function replanUpcomingPromotableRequests(
+  opts?: ComputeOptions,
+): Promise<{ requests: number; deliverables: number }> {
+  const today = atMidnight(new Date());
+  const requests = await db.request.findMany({
+    where: {
+      status: { in: PROMOTABLE_REQUEST_STATUSES },
+      noPromo: false,
+      eventStart: { gte: today },
+    },
+    orderBy: { eventStart: "asc" },
+    select: { id: true },
+  });
+
+  let deliverables = 0;
+  for (const request of requests) {
+    deliverables += await replanRequest(request.id, opts);
+  }
+  return { requests: requests.length, deliverables };
 }
