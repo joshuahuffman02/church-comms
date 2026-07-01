@@ -9,6 +9,7 @@ const rule = (tag: string, over: Partial<TagRule> = {}): TagRule => ({
   noPromo: false,
   missionTrip: false,
   suggestedTemplateId: null,
+  schedulePreset: null,
   ...over,
 });
 
@@ -21,6 +22,7 @@ const RULES: TagRule[] = [
   rule("Small Group", { tierSuggestion: 3 }),
   rule("Room Only", { noPromo: true }),
   rule("Mission Trip", { missionTrip: true, suggestedTemplateId: "tmpl-mission" }),
+  rule("Missionary of the Month", { schedulePreset: "monthly_first_sunday_full_run" }),
   rule("Missions", { ministryId: "m-missions" }),
   rule("Sermon Series", { noPromo: true, suggestedTemplateId: "tmpl-series" }),
 ];
@@ -33,6 +35,7 @@ describe("classifyByTags", () => {
     expect(out.noPromo).toBe(false);
     expect(out.missionTrip).toBe(false);
     expect(out.suggestedTemplateIds).toEqual([]);
+    expect(out.schedulePresets).toEqual([]);
   });
 
   it("sets noPromo true when a Room-Only tag is present", () => {
@@ -58,6 +61,7 @@ describe("classifyByTags", () => {
     expect(out.noPromo).toBe(false);
     expect(out.missionTrip).toBe(false);
     expect(out.suggestedTemplateIds).toEqual([]);
+    expect(out.schedulePresets).toEqual([]);
   });
 
   it("returns empty/null for an empty tag list", () => {
@@ -68,6 +72,7 @@ describe("classifyByTags", () => {
       noPromo: false,
       missionTrip: false,
       suggestedTemplateIds: [],
+      schedulePresets: [],
     });
   });
 
@@ -87,6 +92,15 @@ describe("classifyByTags", () => {
     );
     expect(out.suggestedTemplateIds).toEqual(["tmpl-mission", "tmpl-series"]);
     expect(out.missionTrip).toBe(true);
+  });
+
+  it("surfaces and de-duplicates schedule presets for matching tags", () => {
+    const out = classifyByTags(
+      ["Missionary of the Month", "Missionary of the Month"],
+      RULES,
+    );
+
+    expect(out.schedulePresets).toEqual(["monthly_first_sunday_full_run"]);
   });
 
   it("matches case-insensitively and trims whitespace", () => {

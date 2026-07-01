@@ -1,6 +1,8 @@
 "use server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
+import { replanUpcomingPromotableRequests } from "@/lib/plan-service";
+import { isSchedulePresetKey } from "@/lib/schedule-presets";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -18,6 +20,7 @@ function ruleFieldsFromForm(fd: FormData): {
   noPromo: boolean;
   missionTrip: boolean;
   suggestedTemplateId: string | null;
+  schedulePreset: string | null;
 } {
   const ministryRaw = String(fd.get("ministryId") ?? "").trim();
   const ministryId = ministryRaw === "" ? null : ministryRaw;
@@ -29,6 +32,8 @@ function ruleFieldsFromForm(fd: FormData): {
 
   const templateRaw = String(fd.get("suggestedTemplateId") ?? "").trim();
   const suggestedTemplateId = templateRaw === "" ? null : templateRaw;
+  const schedulePresetRaw = String(fd.get("schedulePreset") ?? "").trim();
+  const schedulePreset = isSchedulePresetKey(schedulePresetRaw) ? schedulePresetRaw : null;
 
   return {
     ministryId,
@@ -36,7 +41,24 @@ function ruleFieldsFromForm(fd: FormData): {
     noPromo: fd.get("noPromo") === "on",
     missionTrip: fd.get("missionTrip") === "on",
     suggestedTemplateId,
+    schedulePreset,
   };
+}
+
+function revalidateTagRuleSurfaces() {
+  revalidatePath("/settings/tag-rules");
+  revalidatePath("/requests");
+  revalidatePath("/pipeline");
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/outputs");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
+}
+
+async function replanIfSchedulePresetChanged(changed: boolean) {
+  if (changed) await replanUpcomingPromotableRequests();
 }
 
 /**
@@ -53,11 +75,13 @@ export async function createTagRule(fd: FormData): Promise<void> {
 
   const max = await db.eventTagRule.aggregate({ _max: { sortOrder: true } });
   const sortOrder = (max._max.sortOrder ?? 0) + 1;
+  const fields = ruleFieldsFromForm(fd);
 
   await db.eventTagRule.create({
-    data: { tag, sortOrder, ...ruleFieldsFromForm(fd) },
+    data: { tag, sortOrder, ...fields },
   });
-  revalidatePath("/settings/tag-rules");
+  await replanIfSchedulePresetChanged(fields.schedulePreset !== null);
+  revalidateTagRuleSurfaces();
 }
 
 /**
@@ -69,17 +93,31 @@ export async function updateTagRule(id: string, fd: FormData): Promise<void> {
 
   const tag = String(fd.get("tag") ?? "").trim();
   if (!tag) throw new Error("Tag is required");
+  const before = await db.eventTagRule.findUnique({
+    where: { id },
+    select: { tag: true, schedulePreset: true },
+  });
+  const fields = ruleFieldsFromForm(fd);
 
   await db.eventTagRule.update({
     where: { id },
-    data: { tag, ...ruleFieldsFromForm(fd) },
+    data: { tag, ...fields },
   });
-  revalidatePath("/settings/tag-rules");
+  await replanIfSchedulePresetChanged(
+    (before?.schedulePreset != null || fields.schedulePreset != null) &&
+      (before?.tag !== tag || before?.schedulePreset !== fields.schedulePreset),
+  );
+  revalidateTagRuleSurfaces();
 }
 
 /** Delete a tag rule. Auth-guarded. */
 export async function deleteTagRule(id: string): Promise<void> {
   await requireAdmin();
+  const before = await db.eventTagRule.findUnique({
+    where: { id },
+    select: { schedulePreset: true },
+  });
   await db.eventTagRule.delete({ where: { id } });
-  revalidatePath("/settings/tag-rules");
+  await replanIfSchedulePresetChanged(before?.schedulePreset != null);
+  revalidateTagRuleSurfaces();
 }

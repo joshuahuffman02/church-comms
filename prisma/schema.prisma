@@ -80,6 +80,9 @@ model Ministry {
 ///                        Sermon Series checklist). Surfaced as a hint on the
 ///                        event; never auto-applied. FK SetNull so deleting a
 ///                        playbook leaves the rule intact, just without a suggestion.
+///   schedulePreset     — optional channel placement preset for matching tags,
+///                        e.g. monthly awareness items that need first-Sunday
+///                        video plus weekly loop/email/web placements.
 /// `tag` is unique (one rule per PCO tag string); matching is case-insensitive.
 model EventTagRule {
   id                  String         @id @default(cuid())
@@ -91,11 +94,13 @@ model EventTagRule {
   missionTrip         Boolean        @default(false)
   suggestedTemplateId String?
   suggestedTemplate   EventTemplate? @relation(fields: [suggestedTemplateId], references: [id], onDelete: SetNull)
+  schedulePreset      String?
   sortOrder           Int            @default(0)
   createdAt           DateTime       @default(now())
 
   @@index([ministryId])
   @@index([suggestedTemplateId])
+  @@index([schedulePreset])
 }
 
 model Channel {

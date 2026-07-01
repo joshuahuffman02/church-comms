@@ -3,8 +3,9 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
 import { parseChannelUpdate } from "@/lib/channel-form";
+import { replanUpcomingPromotableRequests } from "@/lib/plan-service";
 
-const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot"]);
+const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot", "single_weekday"]);
 
 function revalidateChannelSurfaces() {
   revalidatePath("/settings/channels");
@@ -68,6 +69,7 @@ export async function updateChannel(
     return { ok: false, error: "Couldn’t save — that channel may no longer exist." };
   }
 
+  await replanUpcomingPromotableRequests();
   revalidateChannelSurfaces();
   return { ok: true, savedAt: Date.now() };
 }
@@ -129,6 +131,7 @@ export async function createChannel(fd: FormData) {
     },
   });
 
+  await replanUpcomingPromotableRequests();
   revalidateChannelSurfaces();
 }
 

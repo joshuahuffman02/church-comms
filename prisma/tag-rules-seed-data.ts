@@ -11,6 +11,8 @@
 // apply. See `src/lib/tag-rules.ts` for how rules are matched/applied.
 import type { PrismaClient } from "@prisma/client";
 
+const MONTHLY_FIRST_SUNDAY_FULL_RUN = "monthly_first_sunday_full_run";
+
 /** A default rule definition. `ministryNames` are candidates tried in order. */
 export type TagRuleSeed = {
   tag: string;
@@ -22,6 +24,8 @@ export type TagRuleSeed = {
   /** Name of an Event Playbook this tag suggests; resolved to its id at upsert
    * time (no-op if that playbook isn't seeded). Generic tag→playbook link. */
   suggestedPlaybookName?: string;
+  /** Optional schedule preset key applied by the planner for matching tags. */
+  schedulePreset?: string;
 };
 
 // The default tag vocabulary models a common Planning Center setup. Adapt these
@@ -81,6 +85,12 @@ export const DEFAULT_TAG_RULES: TagRuleSeed[] = [
     tierSuggestion: null, // rides on the All-Church tag for tier-1 reach
     missionTrip: true,
     suggestedPlaybookName: "Mission Trip",
+  },
+  {
+    tag: "Missionary of the Month",
+    ministryNames: ["Missions"],
+    tierSuggestion: 1,
+    schedulePreset: MONTHLY_FIRST_SUNDAY_FULL_RUN,
   },
   // A sermon series is NOT promoted across ad channels (noPromo) — its launch
   // instead offers the Sermon Series brand/asset checklist. The tag + playbook
@@ -142,6 +152,7 @@ export async function upsertDefaultTagRules(
       noPromo: r.noPromo ?? false,
       missionTrip: r.missionTrip ?? false,
       suggestedTemplateId,
+      schedulePreset: r.schedulePreset ?? null,
       sortOrder: i,
     };
     await db.eventTagRule.upsert({
