@@ -38,6 +38,7 @@ function touch(
     scheduledAt,
     content: opts.content ?? null,
     status: opts.touchStatus ?? "scheduled",
+    removedAt: null,
     deliverable: {
       status: opts.status ?? "to_design",
       request: {

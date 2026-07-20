@@ -107,6 +107,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         noPromo: true,
         missionTrip: true,
         suggestedTemplateId: true,
+        schedulePreset: true,
       },
     }),
     db.activityLog.findMany({

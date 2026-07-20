@@ -28,7 +28,7 @@ type MonthlyChannelRule = {
 const MONTHLY_FIRST_SUNDAY_RULES: MonthlyChannelRule[] = [
   { key: "announcement_video", placement: "first_sunday", fallbackWeekdays: [0] },
   { key: "loop", placement: "weekly", fallbackWeekdays: [0] },
-  { key: "email", placement: "weekly", fallbackWeekdays: [4] },
+  { key: "email", placement: "weekly", fallbackWeekdays: [3] },
   { key: "web", placement: "weekly", fallbackWeekdays: [1] },
 ];
 

@@ -62,6 +62,56 @@ describe("windowed (loop on Sundays)", () => {
   });
 });
 
+describe("PV Update Email", () => {
+  const pvUpdate: ChannelConfig = {
+    key: "email",
+    name: "PV Update Email",
+    type: "windowed",
+    defaultPublishOffsetDays: 21,
+    productionLeadDays: 3,
+    cadence: { weekdays: [3] },
+    tierEligibility: [1, 2, 3],
+  };
+
+  it("lists an in-window event every week from today through the event", () => {
+    const d = computeDeliverable(
+      pvUpdate,
+      { eventStart: atMidnight(new Date("2026-07-22")), tier: 2 },
+      atMidnight(new Date("2026-07-01")),
+    );
+
+    expect(d.status).toBe("to_design");
+    expect(d.windowStart!.toISOString().slice(0, 10)).toBe("2026-07-01");
+    expect(d.windowEnd!.toISOString().slice(0, 10)).toBe("2026-07-22");
+    expect(d.touches.map(t => t.scheduledAt.toISOString().slice(0, 10))).toEqual([
+      "2026-07-01",
+      "2026-07-08",
+      "2026-07-15",
+      "2026-07-22",
+    ]);
+  });
+
+  it("stops at signup close when that is before the event", () => {
+    const d = computeDeliverable(
+      pvUpdate,
+      {
+        eventStart: atMidnight(new Date("2026-08-02")),
+        promotionEndsAt: atMidnight(new Date("2026-07-16")),
+        tier: 1,
+      },
+      atMidnight(new Date("2026-07-01")),
+    );
+
+    expect(d.status).toBe("to_design");
+    expect(d.windowEnd!.toISOString().slice(0, 10)).toBe("2026-07-16");
+    expect(d.touches.map(t => t.scheduledAt.toISOString().slice(0, 10))).toEqual([
+      "2026-07-01",
+      "2026-07-08",
+      "2026-07-15",
+    ]);
+  });
+});
+
 describe("late detection", () => {
   it("marks skipped when production is already past 'today'", () => {
     const video = { ...push, key: "produced_video", productionLeadDays: 42, defaultPublishOffsetDays: 42 };

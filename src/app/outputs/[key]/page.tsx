@@ -5,6 +5,7 @@ import { DELIVERABLE_STATUS_META } from "@/lib/status";
 import {
   curatedTouchesThisWeekForChannel,
   groupCuratedOutputTouchesBySunday,
+  groupOutputTouchesBySunday,
   outputUpcomingRange,
   upcomingTouchesForChannel,
   type OutputTouch,
@@ -15,7 +16,13 @@ import { ScheduleLockButton } from "@/components/schedule-lock-button";
 import { MinistryDots } from "@/components/ministry-dots";
 import { phaseLabel } from "@/lib/labels";
 import { comingSunday, weekRange } from "@/lib/week";
-import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
+import {
+  announcementLineupRequestIds,
+  loadAnnouncementVideoLineup,
+  loadAnnouncementVideoLineups,
+  type AnnouncementLineupEntry,
+  type AnnouncementVideoLineup,
+} from "@/lib/announcement-video";
 import {
   localDayKey,
   preferredLockedRequestIds,
@@ -40,8 +47,8 @@ function StatusChip({ status }: { status: string }) {
   const meta = DELIVERABLE_STATUS_META[status] ?? { label: status, color: "#94a3b8" };
   return (
     <span
-      className="rounded-full px-3 py-1 text-xs font-semibold shrink-0"
-      style={{ background: `${meta.color}22`, color: meta.color }}
+      className="shrink-0 rounded-full border px-3 py-1 text-xs font-semibold text-slate-700"
+      style={{ background: `${meta.color}18`, borderColor: `${meta.color}55` }}
     >
       {meta.label}
     </span>
@@ -57,6 +64,27 @@ function uniqueIds(ids: readonly string[]): string[] {
     out.push(id);
   }
   return out;
+}
+
+function LineupReferenceRows({ entries }: { entries: AnnouncementLineupEntry[] }) {
+  return entries
+    .filter((entry) => !entry.touchId)
+    .map((entry) => (
+      <div key={entry.key} className="flex items-center gap-2 border-t border-slate-100 py-2.5 text-sm">
+        <span className={`grid h-5 w-5 place-items-center rounded-full text-xs font-bold ${entry.missingTouch ? "bg-red-100 text-red-800" : "bg-violet-100 text-violet-800"}`}>
+          {entry.missingTouch ? "!" : "•"}
+        </span>
+        {entry.requestId ? (
+          <Link href={`/requests/${entry.requestId}`} className="font-semibold hover:underline">{entry.title}</Link>
+        ) : (
+          <span className="font-semibold">{entry.title}</span>
+        )}
+        <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">
+          {entry.source === "awareness" ? "awareness" : "featured"}
+        </span>
+        {entry.missingTouch && <span className="text-xs font-semibold text-red-800">scheduled slide missing</span>}
+      </div>
+    ));
 }
 
 function preferredLocksByOutputSunday(locks: readonly ScheduleLockLite[]): Map<string, string[]> {
@@ -136,35 +164,52 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
   if (!channel || !channel.active) notFound();
 
   const today = new Date();
-  // For the announcement video, the hand-picked Top-3 is the featured (live) set
-  // this week; everything else over the cap shows as "held".
   const currentWeek = weekRange(today);
   const upcomingRange = outputUpcomingRange(today);
-  const scheduleLocks = await scheduleLocksForChannelRange(
-    channel.id,
-    currentWeek.start,
-    upcomingRange.end,
-  );
+  const [scheduleLocks, currentVideoLineup] = await Promise.all([
+    scheduleLocksForChannelRange(channel.id, currentWeek.start, upcomingRange.end),
+    channel.key === "announcement_video"
+      ? loadAnnouncementVideoLineup(comingSunday(today))
+      : Promise.resolve(null),
+  ]);
   const currentWeekEndExclusive = addDays(currentWeek.end, 1);
   const currentLocks = scheduleLocks.filter((lock) => lock.scheduledAt < currentWeekEndExclusive);
-  const top3Preferred =
-    channel.key === "announcement_video"
-      ? pickedRequestIds(await loadSundayTop3(comingSunday(today)))
-      : undefined;
-  const preferred = uniqueIds([
-    ...preferredLockedRequestIds(currentLocks),
-    ...(top3Preferred ?? []),
-  ]);
+  const preferred = currentVideoLineup
+    ? announcementLineupRequestIds(currentVideoLineup)
+    : uniqueIds(preferredLockedRequestIds(currentLocks));
   const [week, upcoming] = await Promise.all([
-    curatedTouchesThisWeekForChannel(channel, today, preferred),
+    curatedTouchesThisWeekForChannel(
+      channel,
+      today,
+      preferred,
+      channel.key === "announcement_video",
+    ),
     upcomingTouchesForChannel(channel.id, today),
   ]);
   const { live, held, liveEventCount, cap } = week;
   const lockIdByPlacement = scheduleLockLookup(scheduleLocks);
-  const preferredBySunday = preferredLocksByOutputSunday(
-    scheduleLocks.filter((lock) => lock.scheduledAt >= upcomingRange.start),
+  const upcomingSundays = groupOutputTouchesBySunday(upcoming).map((group) => group.sunday);
+  const upcomingVideoLineups =
+    channel.key === "announcement_video"
+      ? await loadAnnouncementVideoLineups(upcomingSundays)
+      : new Map<string, AnnouncementVideoLineup>();
+  const preferredBySunday =
+    channel.key === "announcement_video"
+      ? new Map(
+          [...upcomingVideoLineups.entries()].map(([day, lineup]) => [
+            day,
+            announcementLineupRequestIds(lineup),
+          ]),
+        )
+      : preferredLocksByOutputSunday(
+          scheduleLocks.filter((lock) => lock.scheduledAt >= upcomingRange.start),
+        );
+  const upcomingGroups = groupCuratedOutputTouchesBySunday(
+    upcoming,
+    channel,
+    preferredBySunday,
+    channel.key === "announcement_video",
   );
-  const upcomingGroups = groupCuratedOutputTouchesBySunday(upcoming, channel, preferredBySunday);
   const upcomingCount = upcomingGroups.reduce((sum, group) => sum + group.items.length, 0);
   const lockIdFor = (touch: OutputTouch) =>
     lockIdByPlacement.get(
@@ -193,7 +238,11 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
         <div className="font-bold mb-2">
           Live this week{" "}
           <span className="text-muted">
-            · {cap != null ? `${liveEventCount} event${liveEventCount === 1 ? "" : "s"}` : live.length}
+            · {currentVideoLineup
+              ? `${currentVideoLineup.entries.length} item${currentVideoLineup.entries.length === 1 ? "" : "s"}`
+              : cap != null
+                ? `${liveEventCount} event${liveEventCount === 1 ? "" : "s"}`
+                : live.length}
           </span>
           {cap != null && (
             <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted">
@@ -201,11 +250,15 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
             </span>
           )}
         </div>
-        {live.length === 0 ? (
+        {(currentVideoLineup?.issues ?? []).map((issue) => (
+          <p key={issue} role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">{issue}</p>
+        ))}
+        {live.length === 0 && (currentVideoLineup?.entries.length ?? 0) === 0 ? (
           <div className="text-muted text-sm">Nothing scheduled on this output this week.</div>
         ) : (
           live.map(t => <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} editable />)
         )}
+        {currentVideoLineup && <LineupReferenceRows entries={currentVideoLineup.entries} />}
 
         {held.length > 0 && (
           <details className="mt-4 border-t border-slate-100 pt-3">
@@ -238,6 +291,12 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
                   For {fmtSunday(group.sunday)}
                 </div>
                 {group.items.map(t => <TouchRow key={t.id} t={t} channelName={channel.name} lockId={lockIdFor(t)} muted />)}
+                {channel.key === "announcement_video" && (
+                  <LineupReferenceRows entries={upcomingVideoLineups.get(localDayKey(group.sunday))?.entries ?? []} />
+                )}
+                {(upcomingVideoLineups.get(localDayKey(group.sunday))?.issues ?? []).map((issue) => (
+                  <p key={issue} role="alert" className="mt-1 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">{issue}</p>
+                ))}
                 {group.held.length > 0 && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-xs font-semibold text-muted select-none">

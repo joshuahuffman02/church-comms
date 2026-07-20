@@ -406,6 +406,8 @@ model VideoTop3Item {
   createdAt DateTime @default(now())
 
   @@index([sunday])
+  @@unique([sunday, sortOrder])
+  @@unique([sunday, requestId])
 }
 
 model Asset {
@@ -449,6 +451,10 @@ model Touch {
   scheduledAt   DateTime
   purposeLabel  String?
   status        String      @default("scheduled") // scheduled|published|skipped
+  // Loop removals are a different action from publishing the original Sunday
+  // placement. Keeping their completion timestamp separate prevents a removal
+  // checkbox from rewriting the prior touch's publication state.
+  removedAt     DateTime?
   // Per-week editable content: lets the SAME deliverable carry different copy /
   // graphic / note on each weekly appearance (e.g. the Jun 7 loop slide differs
   // from Jun 14). Empty/null falls back to the event-level defaults in exports.

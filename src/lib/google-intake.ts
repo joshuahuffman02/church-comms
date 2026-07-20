@@ -3,7 +3,8 @@
  *
  * Events on a church Google Calendar flow into a review inbox first. Staff
  * manually accept the right ones as lightweight STUB Requests (status
- * "submitted", no plan), then a dated "New event intake" checklist ripens them:
+ * "submitted", with a tentative plan), then a dated "New event intake"
+ * checklist ripens them:
  * confirm details → create the Planning Center event (a guided human step,
  * since PCO's API is read-only) → set audience/channels → confirm room. Reuses
  * the existing external-calendar fetch/parse, the unique `externalCalendarKey`
@@ -17,6 +18,7 @@ import { db } from "@/lib/db";
 import { activeExternalCalendarUrl } from "@/lib/calendar-settings";
 import { atMidnight } from "@/lib/engine/dates";
 import { computeTaskDueDates } from "@/lib/playbooks";
+import { generateDeliverablesForRequest } from "@/lib/plan-service";
 import {
   fetchExternalCalendarEvents,
   buildExternalEventPreview,
@@ -155,8 +157,8 @@ export async function applyIntakeChecklist(requestId: string): Promise<number> {
 // ── Stub creation + selection ────────────────────────────────────────────────
 
 /**
- * Create one Google-sourced stub Request (submitted, unplanned) + its ripening
- * checklist. Returns the new id, or null if a stub for this key already exists
+ * Create one Google-sourced stub Request (submitted, tentatively planned) + its
+ * ripening checklist. Returns the new id, or null if a stub for this key already exists
  * (dedup on the unique externalCalendarKey — safe under concurrent syncs).
  */
 export async function createGoogleStub(event: ExternalCalendarEvent): Promise<string | null> {
@@ -177,7 +179,10 @@ export async function createGoogleStub(event: ExternalCalendarEvent): Promise<st
       },
       select: { id: true },
     });
-    await applyIntakeChecklist(request.id);
+    await Promise.all([
+      generateDeliverablesForRequest(request.id),
+      applyIntakeChecklist(request.id),
+    ]);
     return request.id;
   } catch {
     // Unique externalCalendarKey collision (already imported) — treat as skip.

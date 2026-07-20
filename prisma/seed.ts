@@ -30,7 +30,7 @@ const CHANNELS = [
   { key: "facebook", name: "Facebook", type: "windowed", defaultPublishOffsetDays: 21, productionLeadDays: 3, cadence: { weekdays: [0,3] }, frequencyCap: 6, tierEligibility: [1,2], color: "#3b82f6", sortOrder: 4 },
   { key: "instagram", name: "Instagram", type: "windowed", defaultPublishOffsetDays: 21, productionLeadDays: 3, cadence: { weekdays: [0,3] }, frequencyCap: 6, tierEligibility: [1,2], color: "#ec4899", sortOrder: 5 },
   { key: "web", name: "Website", type: "windowed", defaultPublishOffsetDays: 28, productionLeadDays: 7, cadence: { weekdays: [1] }, tierEligibility: [1,2], color: "#22d3ee", sortOrder: 6 },
-  { key: "email", name: "Weekly Email", type: "windowed", defaultPublishOffsetDays: 21, productionLeadDays: 2, cadence: { weekdays: [4] }, tierEligibility: [1,2], color: "#f59e0b", sortOrder: 7, active: false },
+  { key: "email", name: "PV Update Email", type: "windowed", defaultPublishOffsetDays: 21, productionLeadDays: 3, cadence: { weekdays: [3] }, tierEligibility: [1,2,3], color: "#f59e0b", sortOrder: 7, active: true },
   { key: "restroom_signs", name: "Restroom Signs", type: "windowed", defaultPublishOffsetDays: 14, productionLeadDays: 3, cadence: { weekdays: [0] }, frequencyCap: 8, tierEligibility: [1,2,3], color: "#eab308", sortOrder: 8, active: false },
   { key: "inserts", name: "Bulletin Inserts", type: "windowed", defaultPublishOffsetDays: 21, productionLeadDays: 2, cadence: { weekdays: [0] }, tierEligibility: [1,2,3], color: "#94a3b8", sortOrder: 9 },
   { key: "opps_table", name: "Opportunities Table", type: "windowed", defaultPublishOffsetDays: 14, productionLeadDays: 7, cadence: { weekdays: [0] }, frequencyCap: 1, tierEligibility: [], color: "#14b8a6", sortOrder: 10 },

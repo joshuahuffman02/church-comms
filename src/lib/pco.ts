@@ -18,6 +18,7 @@ export const PCO_BASE = "https://api.planningcenteronline.com";
 const EVENT_INSTANCES_URL =
   `${PCO_BASE}/calendar/v2/event_instances` +
   `?filter=future&include=event,resource_bookings,tags&order=starts_at&per_page=50`;
+const PCO_PAGE_GUARD = 100;
 
 export interface PcoEvent {
   /** event_instance id — one Request per occurrence is keyed on this. */
@@ -106,6 +107,7 @@ export interface JsonApiResource {
 export interface JsonApiResponse {
   data?: JsonApiResource[];
   included?: JsonApiResource[];
+  links?: { next?: string | null };
 }
 
 export function asObject(v: unknown): Record<string, unknown> | null {
@@ -273,42 +275,63 @@ export function parsePcoEventInstances(payload: unknown): PcoEvent[] {
 }
 
 /**
- * Fetch upcoming (future) event instances from the PCO Calendar API — including
- * the related event and each occurrence's room bookings — and parse them into
- * `PcoEvent`s. Returns ALL approval states; callers wanting approved-only should
- * use {@link fetchApprovedUpcomingPcoEvents}.
+ * Fetch upcoming (future) event instances from the PCO Calendar API. By default
+ * this loads the first API page, which keeps import/preview pages quick. Pass
+ * `{ maxPages: "all" }` for background syncs that need to find already-linked
+ * events outside the first 50 results.
+ *
+ * Returns ALL approval states; callers wanting approved-only should use
+ * {@link fetchApprovedUpcomingPcoEvents}.
  *
  * Throws a clear Error when unconfigured, on a non-200 response, or on a
  * network failure — the caller catches it and shows the message.
  */
-export async function fetchUpcomingPcoEvents(): Promise<PcoEvent[]> {
+export async function fetchUpcomingPcoEvents(
+  opts: { maxPages?: number | "all" } = {},
+): Promise<PcoEvent[]> {
   if (!pcoConfigured()) {
     throw new Error("Planning Center is not configured");
   }
 
-  let res: Response;
-  try {
-    res = await fetch(EVENT_INSTANCES_URL, {
-      headers: {
-        Authorization: authHeader(),
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`Could not reach Planning Center: ${detail}`);
+  const maxPages = opts.maxPages ?? 1;
+  let nextUrl: string | null = EVENT_INSTANCES_URL;
+  let pages = 0;
+  const events: PcoEvent[] = [];
+
+  while (nextUrl && (maxPages === "all" || pages < maxPages)) {
+    if (pages >= PCO_PAGE_GUARD) {
+      throw new Error("Planning Center returned too many pages to sync safely.");
+    }
+
+    let res: Response;
+    try {
+      res = await fetch(nextUrl, {
+        headers: {
+          Authorization: authHeader(),
+          Accept: "application/json",
+        },
+        cache: "no-store",
+      });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`Could not reach Planning Center: ${detail}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        `Planning Center API error (${res.status} ${res.statusText}). ` +
+          `Check your PCO credentials.`,
+      );
+    }
+
+    const body: unknown = await res.json();
+    events.push(...parsePcoEventInstances(body));
+    const links = asObject(asObject(body)?.links);
+    nextUrl = str(links?.next);
+    pages++;
   }
 
-  if (!res.ok) {
-    throw new Error(
-      `Planning Center API error (${res.status} ${res.statusText}). ` +
-        `Check your PCO credentials.`,
-    );
-  }
-
-  const body: unknown = await res.json();
-  return parsePcoEventInstances(body);
+  return events;
 }
 
 /**
@@ -316,8 +339,10 @@ export async function fetchUpcomingPcoEvents(): Promise<PcoEvent[]> {
  * "A". This is the default list the import/UI works from (event-approval is
  * enough; individual rooms may still be pending in PCO).
  */
-export async function fetchApprovedUpcomingPcoEvents(): Promise<PcoEvent[]> {
-  const all = await fetchUpcomingPcoEvents();
+export async function fetchApprovedUpcomingPcoEvents(
+  opts: { maxPages?: number | "all" } = {},
+): Promise<PcoEvent[]> {
+  const all = await fetchUpcomingPcoEvents(opts);
   return all.filter((e) => e.approvalStatus === "A");
 }
 

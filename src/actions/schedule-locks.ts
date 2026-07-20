@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireEditor } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
 import { atMidnight } from "@/lib/engine/dates";
+import { effectiveEventCap } from "@/lib/social-curation";
 import { revalidatePath } from "next/cache";
 
 function revalidateLockedSchedule(requestId: string, channelKey?: string) {
@@ -14,6 +15,7 @@ function revalidateLockedSchedule(requestId: string, channelKey?: string) {
   if (channelKey) revalidatePath(`/outputs/${channelKey}`);
   revalidatePath("/guardrails");
   revalidatePath("/assign");
+  revalidatePath("/exports");
 }
 
 const fmt = (d: Date) =>
@@ -27,7 +29,15 @@ export async function lockTouch(touchId: string): Promise<string | null> {
     select: {
       scheduledAt: true,
       channelId: true,
-      channel: { select: { key: true, name: true } },
+      channel: {
+        select: {
+          key: true,
+          name: true,
+          type: true,
+          capacity: true,
+          frequencyCap: true,
+        },
+      },
       deliverable: {
         select: {
           requestId: true,
@@ -39,6 +49,27 @@ export async function lockTouch(touchId: string): Promise<string | null> {
   if (!touch) return null;
 
   const scheduledAt = atMidnight(touch.scheduledAt);
+  const alreadyLocked = await db.scheduleLock.findUnique({
+    where: {
+      requestId_channelId_scheduledAt: {
+        requestId: touch.deliverable.requestId,
+        channelId: touch.channelId,
+        scheduledAt,
+      },
+    },
+    select: { id: true },
+  });
+  const cap = effectiveEventCap(touch.channel);
+  if (!alreadyLocked && cap) {
+    const lockedCount = await db.scheduleLock.count({
+      where: { channelId: touch.channelId, scheduledAt },
+    });
+    if (lockedCount >= cap) {
+      throw new Error(
+        `${touch.channel.name} already has ${cap} locked ${cap === 1 ? "slot" : "slots"} on this date. Unlock one before locking another.`,
+      );
+    }
+  }
   const lock = await db.scheduleLock.upsert({
     where: {
       requestId_channelId_scheduledAt: {

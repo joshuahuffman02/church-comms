@@ -48,7 +48,11 @@ function Section({ title, color, rows, kind, hint }: { title: string; color: str
                 {initials(r.ownerName)}
               </span>
             )}
-            <span className="text-muted">{kind === "video" ? `finalize by ${fmt(r.productionDueAt)}` : `due ${fmt(r.productionDueAt)}`}</span>
+            <span className="text-muted">
+              {kind === "video"
+                ? `due ${fmt(r.productionDueAt)} · airs ${fmt(r.instanceDate)}`
+                : `due ${fmt(r.productionDueAt)}`}
+            </span>
             {(kind === "make" || kind === "risk") && <DeliverableStatusButton id={r.id} status={r.status} />}
           </div>
         </div>
@@ -116,7 +120,7 @@ const truncate = (s: string, n = 140) => (s.length > n ? `${s.slice(0, n - 1)}�
 function MessageUpdateRow({ u }: { u: MessageUpdate }) {
   return (
     <div className="flex items-start gap-3 py-2 border-t border-slate-100 text-sm">
-      <UpdateDoneButton id={u.id} done={u.done} />
+      <UpdateDoneButton id={u.id} done={u.done} label={`${u.eventTitle}: ${u.title}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <Link href={`/requests/${u.requestId}`} className="hover:underline">
@@ -223,36 +227,84 @@ function AdminTasksSection({ tasks }: { tasks: AdminTask[] }) {
 
 // ── Top 3 for the announcement video (curated per Sunday) ───────────────────
 
-export type Top3Item = { id: string; title: string; isLabel: boolean; requestId: string | null };
+export type Top3Item = {
+  key: string;
+  pickId: string | null;
+  title: string;
+  requestId: string | null;
+  source: "manual" | "awareness" | "locked" | "automatic";
+  locked: boolean;
+  missingTouch: boolean;
+};
 export type Top3Option = { id: string; title: string; date: Date };
 
-function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item[]; options: Top3Option[] }) {
-  const full = items.length >= 3;
+const TOP3_SOURCE_LABEL: Record<Top3Item["source"], string> = {
+  manual: "featured",
+  awareness: "awareness",
+  locked: "locked",
+  automatic: "auto-filled",
+};
+
+function Top3Section({
+  sunday,
+  items,
+  options,
+  capacity,
+  heldCount,
+  issues,
+}: {
+  sunday: Date;
+  items: Top3Item[];
+  options: Top3Option[];
+  capacity: number;
+  heldCount: number;
+  issues: string[];
+}) {
+  const manualItems = items.filter((item) => item.pickId);
+  const manualFull = manualItems.length >= capacity;
   return (
     <div className="card-float p-5 mb-4" style={{ borderLeft: "5px solid #a78bfa" }}>
       <div className="font-bold mb-1">
-        ⭐ Announcement video — Top 3 for {fmt(sunday)} <span className="text-muted">· {items.length}/3</span>
+        ⭐ Announcement video for {fmt(sunday)} <span className="text-muted">· {items.length}/{capacity}</span>
       </div>
       <div className="text-muted text-xs mb-3">
-        These are what air on this Sunday&apos;s video — and what the run-of-show &amp; script export. Pick upcoming events (any date) or add an awareness item.
+        One final lineup now powers this page, Sunday Checklist, the output page,
+        and both exports. Featured and locked items lead; open slots fill automatically.
       </div>
-      {items.length === 0 && <div className="text-muted text-sm mb-2">No Top 3 picked yet.</div>}
+      {issues.map((issue) => (
+        <p key={issue} role="alert" className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-semibold text-red-800">
+          {issue}
+        </p>
+      ))}
+      {items.length === 0 && <div className="text-muted text-sm mb-2">No eligible slides for this Sunday.</div>}
       {items.map((it, i) => (
-        <div key={it.id} className="flex items-center justify-between gap-3 py-2 border-t border-slate-100 text-sm">
+        <div key={it.key} className="flex items-center justify-between gap-3 py-2 border-t border-slate-100 text-sm">
           <div className="flex items-center gap-2 min-w-0">
             <span className="grid h-6 w-6 place-items-center rounded-full bg-violet-100 text-[11px] font-bold text-violet-700">{i + 1}</span>
             {it.requestId ? (
               <Link href={`/requests/${it.requestId}`} className="hover:underline truncate"><b>{it.title}</b></Link>
             ) : (
-              <span className="truncate"><b>{it.title}</b> <span className="text-muted">· awareness</span></span>
+              <span className="truncate"><b>{it.title}</b></span>
             )}
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-semibold text-violet-800">
+              {TOP3_SOURCE_LABEL[it.source]}
+            </span>
+            {it.locked && <span title="New events cannot displace this slot" aria-label="locked">🔒</span>}
+            {it.missingTouch && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-800">slide missing</span>}
           </div>
-          <form action={removeTop3Item.bind(null, it.id)}>
-            <button type="submit" className="text-muted hover:text-red-600 text-xs" aria-label="Remove from Top 3">remove</button>
-          </form>
+          {it.pickId && (
+            <form action={removeTop3Item.bind(null, it.pickId)}>
+              <button type="submit" className="text-muted hover:text-red-700 text-xs" aria-label={`Stop featuring ${it.title}`}>remove feature</button>
+            </form>
+          )}
         </div>
       ))}
-      {!full && (
+      {heldCount > 0 && (
+        <p className="mt-2 text-xs text-muted">
+          {heldCount} eligible event{heldCount === 1 ? " is" : "s are"} waiting outside the {capacity} available slots.
+        </p>
+      )}
+      {!manualFull && (
         <form action={addTop3Item} className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
           <input type="hidden" name="sunday" value={sunday.toISOString()} />
           <select name="requestId" className="w-full rounded-2xl border px-3 py-1.5 text-sm" defaultValue="">
@@ -268,14 +320,14 @@ function Top3Section({ sunday, items, options }: { sunday: Date; items: Top3Item
           </div>
         </form>
       )}
-      {full && options.length > 0 && (
+      {manualFull && options.length > 0 && (
         <form action={replaceTop3Item} className="mt-3 grid gap-2 border-t border-slate-100 pt-3">
-          <div className="text-muted text-xs">Full at 3 — swap one out in a single step:</div>
+          <div className="text-muted text-xs">All {capacity} manual slots are used — swap one in a single step:</div>
           <div className="flex flex-wrap items-center gap-2">
             <select name="removeId" defaultValue="" required className="min-w-0 flex-1 rounded-2xl border px-3 py-1.5 text-sm">
               <option value="" disabled>— take off —</option>
-              {items.map((it) => (
-                <option key={it.id} value={it.id}>{it.title}</option>
+              {manualItems.map((it) => (
+                <option key={it.pickId} value={it.pickId ?? ""}>{it.title}</option>
               ))}
             </select>
             <span className="text-muted text-xs">with</span>
@@ -340,6 +392,9 @@ export function ThisWeekBoard({
   top3Items,
   top3Options,
   top3Sunday,
+  top3Capacity,
+  top3HeldCount,
+  top3Issues,
   weekStart,
   weekEnd,
 }: {
@@ -354,6 +409,9 @@ export function ThisWeekBoard({
   top3Items: Top3Item[];
   top3Options: Top3Option[];
   top3Sunday: Date;
+  top3Capacity: number;
+  top3HeldCount: number;
+  top3Issues: string[];
   weekStart: Date;
   weekEnd: Date;
 }) {
@@ -400,9 +458,22 @@ export function ThisWeekBoard({
       {(loopAdd.length > 0 || loopRemove.length > 0) && (
         <LoopSection add={loopAdd} remove={loopRemove} />
       )}
-      <Top3Section sunday={top3Sunday} items={top3Items} options={top3Options} />
+      <Top3Section
+        sunday={top3Sunday}
+        items={top3Items}
+        options={top3Options}
+        capacity={top3Capacity}
+        heldCount={top3HeldCount}
+        issues={top3Issues}
+      />
       {videoLocks.length > 0 && (
-        <Section title="📺 Announcement video — finalize this week" color="#a78bfa" rows={videoLocks} kind="video" />
+        <Section
+          title="📺 Announcement video assets due this week"
+          hint="Production due now for the Sunday air dates shown on each row."
+          color="#a78bfa"
+          rows={videoLocks}
+          kind="video"
+        />
       )}
 
       {allCaughtUp && (
