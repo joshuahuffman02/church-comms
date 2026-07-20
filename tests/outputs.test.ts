@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { atMidnight } from "../src/lib/engine/dates";
 import {
   DEFAULT_OUTPUT_UPCOMING_WEEKS,
+  groupCuratedOutputTouchesBySunday,
   groupOutputTouchesBySunday,
   outputUpcomingRange,
 } from "../src/lib/outputs";
@@ -30,6 +31,36 @@ describe("outputUpcomingRange", () => {
     expect(groups.map((group) => group.items.map((item) => item.id))).toEqual([
       ["a", "b"],
       ["c"],
+    ]);
+  });
+
+  it("uses the canonical video ids exactly instead of filling an awareness slot again", () => {
+    const scheduledAt = atMidnight(new Date("2026-07-26"));
+    const touches = ["featured", "held-one", "held-two"].map((requestId) => ({
+      id: `touch-${requestId}`,
+      scheduledAt,
+      deliverable: {
+        request: {
+          id: requestId,
+          tier: 1,
+          eventStart: scheduledAt,
+          title: requestId,
+        },
+      },
+    }));
+    const preferred = new Map([["2026-07-26", ["featured"]]]);
+
+    const [group] = groupCuratedOutputTouchesBySunday(
+      touches as never,
+      { type: "dated_instance", capacity: 3, frequencyCap: null },
+      preferred,
+      true,
+    );
+
+    expect(group.items.map((touch) => touch.deliverable.request.id)).toEqual(["featured"]);
+    expect(group.held.map((touch) => touch.deliverable.request.id)).toEqual([
+      "held-one",
+      "held-two",
     ]);
   });
 });

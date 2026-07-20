@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
 import { atMidnight } from "@/lib/engine/dates";
+import { generateDeliverablesForRequest } from "@/lib/plan-service";
 import {
   LOCAL_ICAL_SOURCE,
   loadLocalIcalEvents,
@@ -56,12 +57,13 @@ export async function importIcalEvents(keys: string[]): Promise<{ created: numbe
       },
       select: { id: true },
     });
+    const planned = await generateDeliverablesForRequest(request.id);
     await logRequestActivity(
       {
         requestId: request.id,
         action: "ical_event_imported",
         summary: `Imported from iCal: ${event.title}`,
-        metadata: { key: event.key, uid: event.uid, dateKey: event.dateKey },
+        metadata: { key: event.key, uid: event.uid, dateKey: event.dateKey, planned },
       },
       user,
     );

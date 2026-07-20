@@ -1,9 +1,12 @@
 "use server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
 import { atMidnight } from "@/lib/engine/dates";
 import { ministryCreateData } from "@/lib/ministries";
+import { generateDeliverablesForRequest, replanRequest } from "@/lib/plan-service";
+import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { classifyByTags, type TagRule } from "@/lib/tag-rules";
 import {
   fetchApprovedUpcomingPcoEvents,
@@ -17,6 +20,8 @@ import {
 } from "@/lib/pco";
 import { syncRooms } from "@/lib/pco-rooms-sync";
 import { revalidatePath } from "next/cache";
+
+const NEW_PCO_EVENT_SYNC_WINDOW = 50;
 
 /**
  * Load the active tag-classification rules ONCE per sync (so we don't query per
@@ -32,6 +37,7 @@ async function loadTagRules(): Promise<TagRule[]> {
     noPromo: r.noPromo,
     missionTrip: r.missionTrip,
     suggestedTemplateId: r.suggestedTemplateId,
+    schedulePreset: r.schedulePreset,
   }));
 }
 
@@ -93,8 +99,8 @@ async function enrichPcoEvent(
  * The single source of truth for turning ONE approved PCO event into a Request.
  *
  * Upserts keyed on `pcoEventId`, so it is idempotent:
- *  - new ids CREATE a Request as "submitted" with NO deliverables (the team
- *    re-tiers and plans at triage), carrying over the PCO logistics we pulled
+ *  - new ids CREATE a Request as "submitted" with a tentative schedule (the
+ *    team confirms/re-tiers it at triage), carrying over the PCO logistics we pulled
  *    (start/end, rooms → location/roomBooked, registration, approval status,
  *    Church Center URL). tier defaults to 2 — triage sets the real tier from
  *    reach; we don't pre-judge.
@@ -115,11 +121,26 @@ async function upsertPcoEvent(
   e: PcoEvent,
   extras: PcoEventExtras,
   rules: TagRule[],
-): Promise<{ id: string; title: string; created: boolean }> {
+): Promise<{ id: string; title: string; created: boolean; replanned: boolean }> {
   const hasRooms = e.rooms.length > 0;
   const hasRegistration = !!e.registrationUrl;
   // PCO enrichment (read-only mirror): empty tag list stored as null.
   const tags = e.tags.length > 0 ? e.tags : null;
+  const pcoTags = tags ?? Prisma.JsonNull;
+  const eventStart = atMidnight(e.startsAt);
+  const eventEnd = e.endsAt ? atMidnight(e.endsAt) : null;
+
+  const existing = await db.request.findUnique({
+    where: { pcoEventId: e.pcoEventId },
+    select: {
+      id: true,
+      eventStart: true,
+      status: true,
+      noPromo: true,
+      _count: { select: { deliverables: true } },
+    },
+  });
+  const dateChanged = !!existing && existing.eventStart.getTime() !== eventStart.getTime();
 
   // Tag-driven auto-classification (CREATE-path only — see below). A matched
   // set of rules yields the event's ministries, the broadest suggested tier,
@@ -140,25 +161,9 @@ async function upsertPcoEvent(
     // triage-owned requester contact as the team set them.
     update: {
       title: e.name,
-      eventStart: atMidnight(e.startsAt),
-      eventEnd: e.endsAt ? atMidnight(e.endsAt) : null,
-      location: e.location,
-      roomBooked: hasRooms ? "yes" : null,
-      pcoApprovalStatus: e.approvalStatus,
-      pcoChurchCenterUrl: e.churchCenterUrl,
-      pcoVisibleInChurchCenter: e.visibleInChurchCenter,
-      pcoFeatured: e.featured,
-      pcoTags: tags ?? undefined,
-      pcoOwnerName: extras.ownerName,
-      pcoOwnerEmail: extras.ownerEmail,
-      pcoRoomStatus: extras.roomStatus,
-    },
-    create: {
-      pcoEventId: e.pcoEventId,
-      title: e.name,
       description: e.description,
-      eventStart: atMidnight(e.startsAt),
-      eventEnd: e.endsAt ? atMidnight(e.endsAt) : null,
+      eventStart,
+      eventEnd,
       location: e.location,
       roomBooked: hasRooms ? "yes" : null,
       needsRegistration: hasRegistration,
@@ -167,7 +172,26 @@ async function upsertPcoEvent(
       pcoChurchCenterUrl: e.churchCenterUrl,
       pcoVisibleInChurchCenter: e.visibleInChurchCenter,
       pcoFeatured: e.featured,
-      pcoTags: tags ?? undefined,
+      pcoTags,
+      pcoOwnerName: extras.ownerName,
+      pcoOwnerEmail: extras.ownerEmail,
+      pcoRoomStatus: extras.roomStatus,
+    },
+    create: {
+      pcoEventId: e.pcoEventId,
+      title: e.name,
+      description: e.description,
+      eventStart,
+      eventEnd,
+      location: e.location,
+      roomBooked: hasRooms ? "yes" : null,
+      needsRegistration: hasRegistration,
+      registrationUrl: e.registrationUrl,
+      pcoApprovalStatus: e.approvalStatus,
+      pcoChurchCenterUrl: e.churchCenterUrl,
+      pcoVisibleInChurchCenter: e.visibleInChurchCenter,
+      pcoFeatured: e.featured,
+      pcoTags,
       pcoOwnerName: extras.ownerName,
       pcoOwnerEmail: extras.ownerEmail,
       pcoRoomStatus: extras.roomStatus,
@@ -186,14 +210,30 @@ async function upsertPcoEvent(
       noPromo: cls.noPromo,
       status: "submitted",
     },
-    select: { id: true, title: true, createdAt: true, updatedAt: true },
+    select: { id: true, title: true },
   });
 
-  // On create, createdAt === updatedAt; on an update they differ.
+  const created = !existing;
+  const shouldReplan =
+    !!existing &&
+    dateChanged &&
+    existing._count.deliverables > 0 &&
+    !existing.noPromo &&
+    PROMOTABLE_REQUEST_STATUSES.includes(existing.status);
+  if (shouldReplan) {
+    await replanRequest(result.id);
+  } else if (created && !cls.noPromo) {
+    // Plan immediately so approval is a publish/visibility decision, not a
+    // second manual sync step. Submitted rows remain hidden from production
+    // surfaces through their status filters.
+    await generateDeliverablesForRequest(result.id);
+  }
+
   return {
     id: result.id,
     title: result.title,
-    created: result.createdAt.getTime() === result.updatedAt.getTime(),
+    created,
+    replanned: shouldReplan,
   };
 }
 
@@ -235,7 +275,11 @@ export async function importPcoEvents(pcoEventIds: string[]): Promise<number> {
         summary: r.created
           ? `Imported from Planning Center: ${r.title}`
           : `Refreshed from Planning Center: ${r.title}`,
-        metadata: { pcoEventId: e.pcoEventId, approvalStatus: e.approvalStatus },
+        metadata: {
+          pcoEventId: e.pcoEventId,
+          approvalStatus: e.approvalStatus,
+          replanned: r.replanned,
+        },
       },
       user,
     );
@@ -277,15 +321,15 @@ export async function testPcoConnection(): Promise<{ ok: boolean; message: strin
 }
 
 /**
- * Sync EVERY approved upcoming Planning Center event into Requests (the whole
- * approved set, not a hand-picked selection). This is the reusable engine the
- * scheduled cron route drives — it is NOT a form action and takes no user
- * session (the cron route guards itself with CRON_SECRET).
+ * Sync Planning Center into Requests. New Requests are limited to the first 50
+ * upcoming events, which avoids flooding the app with every future recurring
+ * instance. Existing linked Requests are searched across all future PCO pages,
+ * so later date/title/registration changes still refresh.
  *
  * Each approved event is upserted via the same {@link upsertPcoEvent} helper
- * `importPcoEvents` uses, so behaviour is identical and idempotent: new events
- * are CREATED as Submitted, existing ones have their PCO-owned logistics
- * refreshed.
+ * `importPcoEvents` uses, so behaviour is identical and idempotent: approved
+ * events in the import window are CREATED as Submitted, while existing linked
+ * events have their PCO-owned logistics refreshed.
  *
  * Throws when PCO is unconfigured or unreachable (the caller catches it).
  * Returns `{ created, updated }` counts.
@@ -294,7 +338,22 @@ export async function syncApprovedPcoEvents(): Promise<{
   created: number;
   updated: number;
 }> {
-  const approved = await fetchApprovedUpcomingPcoEvents();
+  const upcoming = await fetchUpcomingPcoEvents({ maxPages: "all" });
+  const existing = await db.request.findMany({
+    where: { pcoEventId: { not: null } },
+    select: { pcoEventId: true },
+  });
+  const existingPcoIds = new Set(
+    existing.map((request) => request.pcoEventId).filter((id): id is string => !!id),
+  );
+  const createWindowPcoIds = new Set(
+    upcoming.slice(0, NEW_PCO_EVENT_SYNC_WINDOW).map((event) => event.pcoEventId),
+  );
+  const syncable = upcoming.filter(
+    (event) =>
+      existingPcoIds.has(event.pcoEventId) ||
+      (event.approvalStatus === "A" && createWindowPcoIds.has(event.pcoEventId)),
+  );
 
   // Per-sync caches: many approved instances share a parent event (and often an
   // owner), so memoizing the People + resource-request lookups keeps the ~50
@@ -306,7 +365,7 @@ export async function syncApprovedPcoEvents(): Promise<{
 
   let created = 0;
   let updated = 0;
-  for (const e of approved) {
+  for (const e of syncable) {
     const extras = await enrichPcoEvent(e, personCache, roomStatusCache);
     const r = await upsertPcoEvent(e, extras, rules);
     if (r.created) created++;
@@ -314,8 +373,17 @@ export async function syncApprovedPcoEvents(): Promise<{
   }
 
   if (created > 0 || updated > 0) {
-    revalidatePath("/requests");
-    revalidatePath("/import/planning-center");
+    for (const path of [
+      "/requests",
+      "/import/planning-center",
+      "/calendar",
+      "/this-week",
+      "/run-sheet",
+      "/outputs",
+      "/exports",
+    ]) {
+      revalidatePath(path);
+    }
   }
   return { created, updated };
 }

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { db } from "@/lib/db";
@@ -27,11 +28,8 @@ export default async function PlanningCenterImport() {
   if (!isAdmin(me.roles)) {
     return <AdminOnlyCard area="Planning Center imports" />;
   }
-  const externalPreviewPromise = loadExternalCalendarPreview();
-
   // Unconfigured: no-op gracefully with setup instructions.
   if (!pcoConfigured()) {
-    const externalPreview = await externalPreviewPromise;
     return (
       <div className="max-w-4xl">
         <h1 className="text-2xl font-extrabold mb-1">Import from Planning Center 🗓️</h1>
@@ -40,7 +38,9 @@ export default async function PlanningCenterImport() {
           have to re-enter them by hand.
         </p>
         <PcoSetupCard />
-        <ExternalCalendarPreview {...externalPreview} />
+        <Suspense fallback={<ExternalCalendarPreviewFallback />}>
+          <ExternalCalendarPreviewSection />
+        </Suspense>
       </div>
     );
   }
@@ -76,8 +76,6 @@ export default async function PlanningCenterImport() {
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : "Could not load events.";
   }
-
-  const externalPreview = await externalPreviewPromise;
 
   return (
     <div className="max-w-4xl">
@@ -117,7 +115,22 @@ export default async function PlanningCenterImport() {
         </>
       )}
 
-      <ExternalCalendarPreview {...externalPreview} />
+      <Suspense fallback={<ExternalCalendarPreviewFallback />}>
+        <ExternalCalendarPreviewSection />
+      </Suspense>
+    </div>
+  );
+}
+
+async function ExternalCalendarPreviewSection() {
+  const externalPreview = await loadExternalCalendarPreview();
+  return <ExternalCalendarPreview {...externalPreview} />;
+}
+
+function ExternalCalendarPreviewFallback() {
+  return (
+    <div className="card-float mt-6 p-5 text-sm text-muted">
+      Loading calendar preview…
     </div>
   );
 }

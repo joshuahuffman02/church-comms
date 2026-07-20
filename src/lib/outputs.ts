@@ -182,11 +182,15 @@ export function groupCuratedOutputTouchesBySunday(
   touches: readonly OutputTouch[],
   channel: Pick<CuratableChannel, "type" | "capacity" | "frequencyCap">,
   preferredBySunday?: ReadonlyMap<string, readonly string[]>,
+  exactPreferred = false,
 ): CuratedOutputWeekGroup<OutputTouch>[] {
   const cap = effectiveEventCap(channel);
   return groupOutputTouchesBySunday(touches).map((group) => {
     const preferred = preferredBySunday?.get(localDayKey(group.sunday));
-    const { live, held } = splitByWeeklyCap(group.items, touchEventOf, cap, preferred);
+    const { live, held } =
+      exactPreferred && preferred
+        ? exactPreferredTouches(group.items, preferred)
+        : splitByWeeklyCap(group.items, touchEventOf, cap, preferred);
     return {
       ...group,
       items: live,
@@ -207,12 +211,33 @@ export async function curatedTouchesThisWeekForChannel(
   channel: CuratableChannel,
   today: Date,
   preferred?: readonly string[],
+  exactPreferred = false,
 ): Promise<CuratedWeek> {
   const touches = await touchesThisWeekForChannel(channel.id, today);
   const cap = effectiveEventCap(channel);
-  const { live, held } = splitByWeeklyCap(touches, touchEventOf, cap, preferred);
+  const { live, held } =
+    exactPreferred && preferred
+      ? exactPreferredTouches(touches, preferred)
+      : splitByWeeklyCap(touches, touchEventOf, cap, preferred);
   const liveEventCount = distinctRequestCount(live);
   return { live, held, liveEventCount, cap };
+}
+
+/** Keep exactly the canonical request ids, in their canonical order. */
+function exactPreferredTouches(
+  touches: readonly OutputTouch[],
+  preferred: readonly string[],
+): { live: OutputTouch[]; held: OutputTouch[] } {
+  const order = new Map(preferred.map((requestId, index) => [requestId, index] as const));
+  const live = touches
+    .filter((touch) => order.has(touch.deliverable.request.id))
+    .sort(
+      (a, b) =>
+        order.get(a.deliverable.request.id)! - order.get(b.deliverable.request.id)! ||
+        a.scheduledAt.getTime() - b.scheduledAt.getTime(),
+    );
+  const held = touches.filter((touch) => !order.has(touch.deliverable.request.id));
+  return { live, held };
 }
 
 export type ChannelWithCount = {

@@ -263,6 +263,31 @@ export async function generateDeliverablesForRequest(requestId: string): Promise
 }
 
 /**
+ * Self-heal future submitted/approved events that predate automatic planning or
+ * whose first planning attempt failed. The cron calls this idempotently, so an
+ * imported event never needs a separate manual "replan" click.
+ */
+export async function generateMissingTentativePlans(today = new Date()): Promise<{
+  requests: number;
+  deliverables: number;
+}> {
+  const rows = await db.request.findMany({
+    where: {
+      status: { in: ["submitted", ...PROMOTABLE_REQUEST_STATUSES] },
+      noPromo: false,
+      eventStart: { gte: atMidnight(today) },
+      deliverables: { none: {} },
+    },
+    select: { id: true },
+  });
+  let deliverables = 0;
+  for (const row of rows) {
+    deliverables += await generateDeliverablesForRequest(row.id);
+  }
+  return { requests: rows.length, deliverables };
+}
+
+/**
  * Re-plan a request: delete its existing deliverables (cascades touches) then
  * rebuild from the current eventStart/tier. Use after editing an event's date
  * or tier so its schedule reflects the new values instead of going stale.

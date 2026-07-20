@@ -3,7 +3,11 @@ import { weekRange, loopChangesForSunday } from "@/lib/week";
 import { addDays, atMidnight } from "@/lib/engine/dates";
 import { activeUpdateAt, type EventUpdateLite } from "@/lib/updates";
 import { effectiveEventCap, splitByWeeklyCap, type RankableEvent } from "@/lib/social-curation";
-import { loadSundayTop3, pickedRequestIds } from "@/lib/video-top3-data";
+import {
+  announcementLineupRequestIds,
+  loadAnnouncementVideoLineup,
+  type AnnouncementLineupEntry,
+} from "@/lib/announcement-video";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { preferredLockedRequestIds } from "@/lib/schedule-locks";
 
@@ -36,9 +40,9 @@ export type MinistryRef = { name: string; color: string };
 
 export type RunSheetItem = {
   /** Touch id — stable key for the rendered checkbox row. */
-  touchId: string;
+  touchId: string | null;
   /** Owning event id, for opening the event from the checklist. */
-  requestId: string;
+  requestId: string | null;
   /** Owning event title. */
   eventTitle: string;
   /** Primary ministry name + color (first of the set), if the event has any. */
@@ -62,6 +66,12 @@ export type RunSheetItem = {
   eventStart: Date;
   /** Optional registration close/due date (church-local midnight). */
   registrationClosesAt: Date | null;
+  /** Why the Announcement Video item made the final lineup. */
+  lineupSource?: AnnouncementLineupEntry["source"];
+  /** Schedule lock id, when this exact placement is protected. */
+  lockId?: string | null;
+  /** A featured event whose slide is missing is rendered as a blocking issue. */
+  missingTouch?: boolean;
 };
 
 export type RunSheetChannel = {
@@ -72,6 +82,9 @@ export type RunSheetChannel = {
   type: string;
   /** True when this channel's window is just the single Sunday, not Mon..Sun. */
   onSundayOnly: boolean;
+  capacity?: number | null;
+  heldCount?: number;
+  issues?: string[];
   items: RunSheetItem[];
 };
 
@@ -81,6 +94,7 @@ export type RunSheetLoopChange = {
   title: string;
   ministry: string | null;
   done: boolean;
+  lockId?: string | null;
 };
 
 export type RunSheetEvent = {
@@ -150,6 +164,7 @@ export type LoadedTouch = {
   scheduledAt: Date;
   content: string | null;
   status: string;
+  removedAt: Date | null;
   deliverable: {
     status: string;
     request: {
@@ -221,6 +236,32 @@ function toItem(t: LoadedTouch): RunSheetItem {
   };
 }
 
+function announcementEntryToItem(entry: AnnouncementLineupEntry): RunSheetItem {
+  const detail =
+    (entry.content ?? "").trim() ||
+    (entry.nextStepText ?? "").trim() ||
+    entry.title;
+  return {
+    touchId: entry.touchId,
+    requestId: entry.requestId,
+    eventTitle: entry.title,
+    ministry: entry.ministries[0]?.name ?? null,
+    ministryColor: entry.ministries[0]?.color ?? null,
+    ministries: entry.ministries,
+    detail,
+    status: entry.deliverableStatus ?? "scheduled",
+    done: entry.touchStatus === "published",
+    date: atMidnight(entry.scheduledAt),
+    eventStart: atMidnight(entry.eventStart ?? entry.scheduledAt),
+    registrationClosesAt: entry.registrationClosesAt
+      ? atMidnight(entry.registrationClosesAt)
+      : null,
+    lineupSource: entry.source,
+    lockId: entry.lockId,
+    missingTouch: entry.missingTouch,
+  };
+}
+
 /**
  * Pure grouping: bucket a week's worth of touches per channel and reshape into
  * run-sheet rows. The on-Sunday channels (loop / announcement video / stage)
@@ -236,6 +277,7 @@ export function groupTouchesByChannel(
   sunday: Date,
   avPreferred?: readonly string[],
   preferredByChannelId?: ReadonlyMap<string, readonly string[]>,
+  avPreferredIsExact = false,
 ): RunSheetChannel[] {
   const s = atMidnight(sunday);
   const sundayNext = addDays(s, 1); // half-open upper bound for "on Sunday"
@@ -263,9 +305,17 @@ export function groupTouchesByChannel(
       ...(preferredByChannelId?.get(c.id) ?? []),
       ...(c.key === "announcement_video" ? avPreferred ?? [] : []),
     ]);
-    const relevant = cap
-      ? splitByWeeklyCap(windowed, loadedTouchEvent, cap, preferred).live
-      : windowed;
+    const relevant =
+      c.key === "announcement_video" && avPreferredIsExact
+        ? preferred.flatMap((requestId) => {
+            const matches = windowed.filter(
+              (touch) => touch.deliverable.request.id === requestId,
+            );
+            return matches.slice(0, 1);
+          })
+        : cap
+          ? splitByWeeklyCap(windowed, loadedTouchEvent, cap, preferred).live
+          : windowed;
     return {
       channelId: c.id,
       key: c.key,
@@ -273,6 +323,7 @@ export function groupTouchesByChannel(
       color: c.color,
       type: c.type,
       onSundayOnly,
+      capacity: c.capacity,
       items: relevant.map(toItem),
     };
   });
@@ -287,41 +338,91 @@ export function groupTouchesByChannel(
  */
 export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
   const sunday = atMidnight(sundayDate);
-  // The week containing the Sunday is the Mon..Sun ending on that Sunday.
   const { start: weekStart, end: weekEnd } = weekRange(sunday);
-  const sundayNext = addDays(sunday, 1); // half-open upper bound for "on Sunday"
-  const weekUpper = addDays(weekEnd, 1); // half-open upper bound for the week
+  const sundayNext = addDays(sunday, 1);
+  const weekUpper = addDays(weekEnd, 1);
+  const prevSunday = addDays(sunday, -7);
 
-  const channels = await db.channel.findMany({
-    where: { active: true },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true, key: true, name: true, color: true, type: true, capacity: true, frequencyCap: true },
-  });
-
-  // One query for every touch landing anywhere in the Mon..Sun week. We then
-  // bucket per channel in memory, narrowing the on-Sunday channels to the
-  // single Sunday. This avoids a query per channel.
-  const weekTouches = (await db.touch.findMany({
-    where: {
-      deliverable: {
+  // All independent reads run together. The checklist used to serialize most
+  // of these queries, which made its primary page slower as the database grew.
+  const [
+    channels,
+    weekTouchesRaw,
+    scheduleLocks,
+    videoLineup,
+    loopTouchesRaw,
+    eventRows,
+    updateRows,
+  ] = await Promise.all([
+    db.channel.findMany({
+      where: { active: true },
+      orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        color: true,
+        type: true,
+        capacity: true,
+        frequencyCap: true,
+      },
+    }),
+    db.touch.findMany({
+      where: {
+        deliverable: {
+          request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
+        },
+        scheduledAt: { gte: weekStart, lt: weekUpper },
+      },
+      include: touchInclude,
+      orderBy: [
+        { deliverable: { request: { tier: "asc" } } },
+        { deliverable: { request: { eventStart: "asc" } } },
+        { deliverable: { request: { title: "asc" } } },
+        { scheduledAt: "asc" },
+      ],
+    }),
+    db.scheduleLock.findMany({
+      where: { scheduledAt: { gte: weekStart, lt: weekUpper } },
+      select: { id: true, channelId: true, requestId: true, scheduledAt: true },
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
+    }),
+    loadAnnouncementVideoLineup(sunday),
+    db.touch.findMany({
+      where: {
+        channel: { key: "loop" },
+        deliverable: {
+          request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
+        },
+        scheduledAt: { gte: prevSunday, lt: sundayNext },
+      },
+      include: touchInclude,
+      orderBy: { scheduledAt: "asc" },
+    }),
+    db.request.findMany({
+      where: {
+        status: { in: PROMOTABLE_REQUEST_STATUSES },
+        noPromo: false,
+        eventStart: { gte: weekStart, lt: weekUpper },
+      },
+      include: {
+        ministries: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+        updates: true,
+      },
+      orderBy: { eventStart: "asc" },
+    }),
+    db.eventUpdate.findMany({
+      where: {
+        scheduledFor: { gte: weekStart, lt: weekUpper },
         request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
       },
-      scheduledAt: { gte: weekStart, lt: weekUpper },
-    },
-    include: touchInclude,
-    orderBy: [
-      { deliverable: { request: { tier: "asc" } } },
-      { deliverable: { request: { eventStart: "asc" } } },
-      { deliverable: { request: { title: "asc" } } },
-      { scheduledAt: "asc" },
-    ],
-  })) as unknown as LoadedTouch[];
+      include: { request: { select: { title: true } } },
+      orderBy: [{ scheduledFor: "asc" }, { sortOrder: "asc" }],
+    }),
+  ]);
+  const weekTouches = weekTouchesRaw as unknown as LoadedTouch[];
+  const loopTouches = loopTouchesRaw as unknown as LoadedTouch[];
 
-  const scheduleLocks = await db.scheduleLock.findMany({
-    where: { scheduledAt: { gte: weekStart, lt: weekUpper } },
-    select: { channelId: true, requestId: true, scheduledAt: true },
-    orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
-  });
   const preferredByChannelId = new Map<string, string[]>();
   for (const channel of channels) {
     const locked = scheduleLocks.filter((lock) => lock.channelId === channel.id);
@@ -330,38 +431,48 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     }
   }
 
-  const avPreferred = pickedRequestIds(await loadSundayTop3(sunday));
+  const avPreferred = announcementLineupRequestIds(videoLineup);
   const runChannels = groupTouchesByChannel(
     channels,
     weekTouches,
     sunday,
     avPreferred,
     preferredByChannelId,
+    true,
   );
 
-  // Loop add/remove: the loop channel's touches around this Sunday vs last.
-  // loopChangesForSunday compares the touch date to the Sunday (add) and the
-  // prior Sunday (remove), so we fetch a two-week window of loop touches.
-  const loopChannel = channels.find((c) => c.key === "loop");
+  // Attach lock controls to every ordinary touch, then replace Announcement
+  // Video with the canonical resolver so awareness slides and missing-slide
+  // issues appear identically on every surface.
+  for (const channel of runChannels) {
+    if (channel.key === "announcement_video") {
+      channel.capacity = videoLineup.capacity;
+      channel.heldCount = videoLineup.held.length;
+      channel.issues = videoLineup.issues;
+      channel.items = videoLineup.entries.map(announcementEntryToItem);
+      continue;
+    }
+    channel.items = channel.items.map((item) => {
+      if (!item.requestId) return item;
+      const lock = scheduleLocks.find(
+        (candidate) =>
+          candidate.channelId === channel.channelId &&
+          candidate.requestId === item.requestId &&
+          atMidnight(candidate.scheduledAt).getTime() === item.date.getTime(),
+      );
+      return { ...item, lockId: lock?.id ?? null };
+    });
+  }
+
   let loopAdd: RunSheetLoopChange[] = [];
   let loopRemove: RunSheetLoopChange[] = [];
-  if (loopChannel) {
-    const prevSunday = addDays(sunday, -7);
-    const loopTouches = (await db.touch.findMany({
-      where: {
-        channelId: loopChannel.id,
-        deliverable: {
-          request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
-        },
-        scheduledAt: { gte: prevSunday, lt: sundayNext },
-      },
-      include: touchInclude,
-      orderBy: { scheduledAt: "asc" },
-    })) as unknown as LoadedTouch[];
+  if (channels.some((channel) => channel.key === "loop")) {
+    const loopChannelId = channels.find((channel) => channel.key === "loop")?.id;
     const shaped = loopTouches.map((t) => ({
       touchId: t.id,
       scheduledAt: atMidnight(t.scheduledAt),
       done: t.status === "published",
+      removed: t.removedAt != null,
       request: {
         id: t.deliverable.request.id,
         title: t.deliverable.request.title,
@@ -370,30 +481,29 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     }));
     const { add, remove } = loopChangesForSunday(shaped, sunday);
     const flatten = (
-      list: typeof shaped
+      list: typeof shaped,
+      kind: "add" | "remove",
     ): RunSheetLoopChange[] =>
       list.map((t) => ({
         touchId: t.touchId,
         requestId: t.request.id,
         title: t.request.title,
         ministry: t.request.ministry,
-        done: t.done,
+        done: kind === "add" ? t.done : t.removed,
+        lockId:
+          kind === "add" && loopChannelId
+            ? scheduleLocks.find(
+                (lock) =>
+                  lock.channelId === loopChannelId &&
+                  lock.requestId === t.request.id &&
+                  atMidnight(lock.scheduledAt).getTime() === sunday.getTime(),
+              )?.id ?? null
+            : null,
       }));
-    loopAdd = flatten(add);
-    loopRemove = flatten(remove);
+    loopAdd = flatten(add, "add");
+    loopRemove = flatten(remove, "remove");
   }
 
-  // Events physically happening this week (by eventStart within Mon..Sun). We
-  // also load each event's message-arc updates so we can show the phase active
-  // as of this Sunday.
-  const eventRows = await db.request.findMany({
-    where: { eventStart: { gte: weekStart, lt: weekUpper } },
-    include: {
-      ministries: { orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
-      updates: true,
-    },
-    orderBy: { eventStart: "asc" },
-  });
   const events: RunSheetEvent[] = eventRows.map((r) => {
     const ministries = r.ministries.map((m) => ({ name: m.name, color: m.color }));
     const active = activeUpdateAt(r.updates as EventUpdateLite[], sunday);
@@ -409,12 +519,6 @@ export async function buildRunSheet(sundayDate: Date): Promise<RunSheet> {
     };
   });
 
-  // Message-arc updates whose phase date lands in this Mon..Sun week.
-  const updateRows = await db.eventUpdate.findMany({
-    where: { scheduledFor: { gte: weekStart, lt: weekUpper } },
-    include: { request: { select: { title: true } } },
-    orderBy: [{ scheduledFor: "asc" }, { sortOrder: "asc" }],
-  });
   const updatesThisWeek: RunSheetUpdate[] = updateRows.map((u) => ({
     id: u.id,
     requestId: u.requestId,

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hourly macOS event sync. Before installing, replace:
+    __NPM_PATH__  with the result of `which npm`
+    __REPO_ROOT__ with this repository's absolute path
+
+  Then copy to ~/Library/LaunchAgents/com.church-comms.sync.plist and run:
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.church-comms.sync.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.church-comms.sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NPM_PATH__</string>
+    <string>run</string>
+    <string>sync:events</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REPO_ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>TZ</key>
+    <string>America/Chicago</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__REPO_ROOT__/.next/runtime/sync-events.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REPO_ROOT__/.next/runtime/sync-events.err.log</string>
+</dict>
+</plist>

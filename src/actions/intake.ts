@@ -2,6 +2,7 @@
 import { db } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { parseDateInput } from "@/lib/engine/dates";
+import { generateDeliverablesForRequest } from "@/lib/plan-service";
 import { redirect } from "next/navigation";
 
 // PUBLIC, unauthenticated endpoint — every field below is untrusted input.
@@ -76,7 +77,7 @@ export async function submitIntake(fd: FormData) {
   const statusToken = crypto.randomUUID();
 
   // FORCE status server-side; do NOT accept status/tier/deliverables from form.
-  await db.request.create({
+  const request = await db.request.create({
     data: {
       title,
       description: description || null,
@@ -94,9 +95,12 @@ export async function submitIntake(fd: FormData) {
       requesterEmail,
       statusToken,
       status: "submitted",
-      // NO deliverables — planning happens at approval/triage.
+      // The proposed schedule is generated below. Submitted requests stay
+      // hidden from production surfaces until staff approves them.
     },
+    select: { id: true },
   });
+  await generateDeliverablesForRequest(request.id);
 
   const link = `${process.env.APP_URL ?? "http://localhost:3000"}/status/${encodeURIComponent(statusToken)}`;
   const safeName = esc(requesterName || "there");

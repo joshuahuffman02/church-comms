@@ -25,9 +25,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Today",
     items: [
+      { href: "/run-sheet", label: "Sunday Checklist", icon: "🗒️" },
       { href: "/this-week", label: "This Week", icon: "🗓️" },
       { href: "/my-tasks", label: "My Tasks", icon: "✅" },
-      { href: "/run-sheet", label: "Sunday Checklist", icon: "🗒️" },
     ],
   },
   {
