@@ -77,7 +77,7 @@ function ItemRow({ item, channelName }: { item: RunSheetItem; channelName: strin
   );
 
   return (
-    <li className="rs-row flex items-start gap-3 py-2.5">
+    <li className={`rs-row flex items-start gap-3 rounded-xl px-1 py-2.5 ${item.done ? "bg-emerald-50/50" : ""}`}>
       {item.touchId ? (
         <RunSheetCheckbox
           touchId={item.touchId}
@@ -149,7 +149,7 @@ function ItemRow({ item, channelName }: { item: RunSheetItem; channelName: strin
 export default async function RunSheetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sunday?: string; view?: string }>;
+  searchParams: Promise<{ sunday?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -157,13 +157,11 @@ export default async function RunSheetPage({
   const params = await searchParams;
   const parsed = params.sunday ? parseDateInput(params.sunday) : null;
   const sunday = parsed ? comingSunday(parsed) : comingSunday(new Date());
-  const showAll = params.view === "all";
   const sheet = await buildRunSheet(sunday);
 
   const prevSunday = ymd(addDays(sunday, -7));
   const nextSunday = ymd(addDays(sunday, 7));
   const todaySunday = ymd(comingSunday(atMidnight(new Date())));
-  const viewParam = showAll ? "all" : "open";
 
   // Loop additions have their own section below, so the ordinary Loop channel
   // is intentionally excluded. This removes the old duplicate checklist rows.
@@ -184,17 +182,14 @@ export default async function RunSheetPage({
   const remaining = Math.max(0, total - completed);
   const progress = total === 0 ? 100 : Math.round((completed / total) * 100);
 
-  const visibleChannels = actionableChannels
-    .map((channel) => ({
-      ...channel,
-      items: showAll ? channel.items : channel.items.filter((item) => !item.done),
-    }))
-    .filter((channel) => showAll || channel.items.length > 0 || (channel.issues?.length ?? 0) > 0);
-  const loopAdd = showAll ? sheet.loopAdd : sheet.loopAdd.filter((item) => !item.done);
-  const loopRemove = showAll ? sheet.loopRemove : sheet.loopRemove.filter((item) => !item.done);
-  const updates = showAll
-    ? sheet.updatesThisWeek
-    : sheet.updatesThisWeek.filter((item) => !item.done);
+  // Completed rows stay in their original place so checking an item never
+  // makes the checklist jump or appear to lose work.
+  const visibleChannels = actionableChannels.filter(
+    (channel) => channel.items.length > 0 || (channel.issues?.length ?? 0) > 0,
+  );
+  const loopAdd = sheet.loopAdd;
+  const loopRemove = sheet.loopRemove;
+  const updates = sheet.updatesThisWeek;
   const hasVisibleLoop = loopAdd.length > 0 || loopRemove.length > 0;
   const hasVisibleWork = visibleChannels.length > 0 || hasVisibleLoop || updates.length > 0;
 
@@ -211,19 +206,19 @@ export default async function RunSheetPage({
         </div>
         <div className="no-print flex flex-wrap items-center gap-2">
           <Link
-            href={`/run-sheet?sunday=${prevSunday}&view=${viewParam}`}
+            href={`/run-sheet?sunday=${prevSunday}`}
             className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-sky-bg"
           >
             ← Prev
           </Link>
           <Link
-            href={`/run-sheet?sunday=${todaySunday}&view=${viewParam}`}
+            href={`/run-sheet?sunday=${todaySunday}`}
             className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-sky-bg"
           >
             This week
           </Link>
           <Link
-            href={`/run-sheet?sunday=${nextSunday}&view=${viewParam}`}
+            href={`/run-sheet?sunday=${nextSunday}`}
             className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-sky-bg"
           >
             Next →
@@ -245,13 +240,8 @@ export default async function RunSheetPage({
               {remaining === 0 ? "All caught up" : `${remaining} ${remaining === 1 ? "item" : "items"} left`}
             </p>
             <p className="text-sm text-muted">{completed} of {total} completed</p>
+            <p className="mt-1 text-xs text-muted">Checked items stay visible so the list never shifts underneath you.</p>
           </div>
-          <Link
-            href={`/run-sheet?sunday=${ymd(sunday)}&view=${showAll ? "open" : "all"}`}
-            className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            {showAll ? "Incomplete only" : "Show completed"}
-          </Link>
         </div>
         <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-200">
           <div
@@ -264,8 +254,14 @@ export default async function RunSheetPage({
       <div className="rs-body grid gap-4">
         {!hasVisibleWork && (
           <section className="card-float border-l-4 border-emerald-500 p-6 text-center">
-            <p className="text-lg font-bold text-emerald-800">Everything is ready for Sunday.</p>
-            <p className="mt-1 text-sm text-muted">Use “Show completed” if you need to review the full list.</p>
+            <p className="text-lg font-bold text-emerald-800">Nothing is scheduled for this checklist yet.</p>
+          </section>
+        )}
+
+        {hasVisibleWork && remaining === 0 && (
+          <section className="card-float border-l-4 border-emerald-500 p-4">
+            <p className="font-bold text-emerald-800">Everything is ready for Sunday.</p>
+            <p className="mt-0.5 text-sm text-muted">The completed list remains below for review.</p>
           </section>
         )}
 
@@ -306,7 +302,7 @@ export default async function RunSheetPage({
           </section>
         ))}
 
-        {(hasVisibleLoop || showAll) && (
+        {hasVisibleLoop && (
           <section className="rs-section card-float border-l-[5px] border-l-emerald-500 p-5">
             <h2 className="mb-2 text-lg font-bold text-emerald-700">Loop changes this Sunday</h2>
             {!hasVisibleLoop ? (
@@ -320,7 +316,7 @@ export default async function RunSheetPage({
                   ) : (
                     <ul>
                       {loopAdd.map((item) => (
-                        <li key={item.touchId} className="rs-row flex items-start gap-2 py-2 text-sm">
+                        <li key={item.touchId} className={`rs-row flex items-start gap-2 rounded-xl px-1 py-2 text-sm ${item.done ? "bg-emerald-50/50" : ""}`}>
                           <RunSheetCheckbox touchId={item.touchId} done={item.done} label={`Add ${item.title} to Loop`} />
                           <Link href={`/requests/${item.requestId}`} className={`min-w-0 flex-1 font-medium text-ink hover:text-sky-700 hover:underline ${item.done ? "line-through text-muted" : ""}`}>
                             {item.title}
@@ -340,7 +336,7 @@ export default async function RunSheetPage({
                   ) : (
                     <ul>
                       {loopRemove.map((item) => (
-                        <li key={item.touchId} className="rs-row flex items-start gap-2 py-2 text-sm">
+                        <li key={item.touchId} className={`rs-row flex items-start gap-2 rounded-xl px-1 py-2 text-sm ${item.done ? "bg-emerald-50/50" : ""}`}>
                           <RunSheetCheckbox touchId={item.touchId} done={item.done} kind="loop-removal" label={`Remove ${item.title} from Loop`} />
                           <Link href={`/requests/${item.requestId}`} className={`font-medium text-ink hover:text-sky-700 hover:underline ${item.done ? "line-through text-muted" : ""}`}>
                             {item.title}
@@ -355,7 +351,7 @@ export default async function RunSheetPage({
           </section>
         )}
 
-        {(updates.length > 0 || showAll) && (
+        {updates.length > 0 && (
           <section className="rs-section card-float border-l-[5px] border-l-pink-500 p-5">
             <h2 className="mb-2 text-lg font-bold text-pink-700">Message updates this week ({updates.length})</h2>
             {updates.length === 0 ? (
@@ -363,7 +359,7 @@ export default async function RunSheetPage({
             ) : (
               <ul className="divide-y divide-slate-100">
                 {updates.map((update) => (
-                  <li key={update.id} className="rs-row flex items-start gap-3 py-2.5">
+                  <li key={update.id} className={`rs-row flex items-start gap-3 rounded-xl px-1 py-2.5 ${update.done ? "bg-emerald-50/50" : ""}`}>
                     <UpdateDoneButton id={update.id} done={update.done} label={`${update.eventTitle}: ${update.title}`} />
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

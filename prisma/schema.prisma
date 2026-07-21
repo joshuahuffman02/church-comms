@@ -183,6 +183,9 @@ model Request {
   cost                 String?
   capacity             Int?
   registrationClosesAt DateTime?
+  // Optional per-event promotion timing override. Null lets tag rules and the
+  // routine Rise/Thrive recommendation choose; a saved value always wins.
+  schedulePreset       String?
   roomBooked           String?
   nextStepText         String?
   nextStepUrl          String?
@@ -204,6 +207,7 @@ model Request {
   scheduleLocks        ScheduleLock[]
 
   @@index([seriesId])
+  @@index([schedulePreset])
 }
 
 /// An ignored occurrence from a local/external iCal import preview. This is the
@@ -279,6 +283,7 @@ model EventUpdate {
   createdAt    DateTime @default(now())
 
   @@index([requestId, scheduledFor])
+  @@index([scheduledFor, status])
 }
 
 /// An "Event Playbook": a reusable, dated admin CHECKLIST template (e.g.
@@ -335,6 +340,7 @@ model EventTask {
   createdAt DateTime @default(now())
 
   @@index([requestId])
+  @@index([dueAt, status])
 }
 
 /// A standing item (e.g. "Missionary of the Month", "Tuesday Talks") defined
@@ -440,6 +446,8 @@ model Deliverable {
   touches         Touch[]
 
   @@index([ownerId])
+  @@index([productionDueAt, status])
+  @@index([channelId, productionDueAt])
 }
 
 model Touch {
@@ -461,6 +469,9 @@ model Touch {
   content       String?
   assetLink     String?
   note          String?
+
+  @@index([channelId, scheduledAt])
+  @@index([deliverableId])
 }
 
 /// A staff-pinned event/channel/date placement. Locks are independent of

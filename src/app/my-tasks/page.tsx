@@ -31,7 +31,11 @@ function TaskRow({ t }: { t: MyTask }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-muted text-xs">make by {fmt(t.productionDueAt)}</span>
         <ProofActions id={t.id} status={t.status} />
-        <DeliverableStatusButton id={t.id} status={t.status} />
+        <DeliverableStatusButton
+          id={t.id}
+          status={t.status}
+          label={`${t.requestTitle}, ${t.channelName}`}
+        />
       </div>
     </div>
   );

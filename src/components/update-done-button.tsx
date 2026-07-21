@@ -14,25 +14,27 @@ export function UpdateDoneButton({ id, done, label }: { id: string; done: boolea
   const [pending, start] = useTransition();
   return (
     <span className="inline-flex shrink-0 flex-col items-center">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={pending}
-        aria-label={`${checked ? "Mark not done" : "Mark done"}: ${label}`}
-        onChange={(e) => {
-          const next = e.target.checked;
-          setError(null);
-          start(async () => {
-            setChecked(next);
-            try {
-              await setUpdateStatus(id, next ? "done" : "planned");
-            } catch {
-              setError("Not saved");
-            }
-          });
-        }}
-        className="rs-checkbox mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-emerald-600 disabled:opacity-50"
-      />
+      <label className="grid h-11 w-11 cursor-pointer place-items-center rounded-xl hover:bg-emerald-50">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={pending}
+          aria-label={`${checked ? "Mark not done" : "Mark done"}: ${label}`}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setError(null);
+            start(async () => {
+              setChecked(next);
+              try {
+                await setUpdateStatus(id, next ? "done" : "planned");
+              } catch {
+                setError("Not saved");
+              }
+            });
+          }}
+          className="rs-checkbox h-5 w-5 shrink-0 cursor-pointer accent-emerald-600 disabled:opacity-50"
+        />
+      </label>
       {error && (
         <span role="alert" className="mt-0.5 text-[9px] font-bold text-red-700">
           {error}

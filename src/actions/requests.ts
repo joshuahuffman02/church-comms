@@ -2,10 +2,10 @@
 import { db } from "@/lib/db";
 import { requireEditor } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
-import { planEvent, toPrismaDeliverables } from "@/lib/engine/persist";
 import { parseDateInput } from "@/lib/engine/dates";
 import { ministryCreateData, ministryIdsFromForm } from "@/lib/ministries";
-import { activeChannelConfig, planningInputForRequest } from "@/lib/plan-service";
+import { generateDeliverablesForRequest } from "@/lib/plan-service";
+import { isSchedulePresetKey } from "@/lib/schedule-presets";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -42,12 +42,8 @@ export async function createRequest(fd: FormData) {
   if (!eventStart) return;
   const registrationClosesAt = parseDateInput(String(fd.get("registrationClosesAt") ?? ""));
   const needsRegistration = fd.get("needsRegistration") != null;
-  const { cfg, idByKey } = await activeChannelConfig();
-  const plan = planEvent(
-    planningInputForRequest({ eventStart, registrationClosesAt, tier }),
-    cfg,
-    new Date(),
-  );
+  const schedulePresetRaw = String(fd.get("schedulePreset") ?? "").trim();
+  const schedulePreset = isSchedulePresetKey(schedulePresetRaw) ? schedulePresetRaw : null;
   // All selected ministries (all equal) → the m-n source of truth; the legacy
   // ministryId is kept in sync (= the first selected) by the shared helper.
   const ministryIds = ministryIdsFromForm(fd);
@@ -58,19 +54,20 @@ export async function createRequest(fd: FormData) {
       whoIsItFor, tier, eventStart,
       needsRegistration,
       registrationClosesAt,
+      schedulePreset,
       nextStepText: readField(fd, "nextStep", NEXT_STEP_CAP),
       status: "approved",
       ...ministryCreateData(ministryIds),
-      deliverables: { create: toPrismaDeliverables(plan, idByKey) },
     },
     select: { id: true },
   });
+  const deliverables = await generateDeliverablesForRequest(request.id);
   await logRequestActivity(
     {
       requestId: request.id,
       action: "request_created",
       summary: `Created and scheduled ${title}`,
-      metadata: { tier, deliverables: plan.length, source: "staff" },
+      metadata: { tier, deliverables, schedulePreset, source: "staff" },
     },
     user,
   );

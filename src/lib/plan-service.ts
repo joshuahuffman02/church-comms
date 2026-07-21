@@ -1,7 +1,12 @@
 import { db } from "@/lib/db";
 import { planEvent, toPrismaDeliverables } from "@/lib/engine/persist";
 import { atMidnight, maxDate, minDate, phaseFor, subDays } from "@/lib/engine/dates";
-import { applySchedulePresetPlacementsToPlan, schedulePresetPlacements } from "@/lib/schedule-presets";
+import {
+  applySchedulePresetPlacementsToPlan,
+  effectiveSchedulePresetsForRequest,
+  schedulePresetChannelKeys,
+  schedulePresetPlacements,
+} from "@/lib/schedule-presets";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { schedulePresetsForTags } from "@/lib/tag-rules";
 import type { ComputeOptions } from "@/lib/engine/timeline";
@@ -235,10 +240,13 @@ async function buildDeliverablesForRequest(requestId: string, opts?: ComputeOpti
     }),
   ]);
   const input = planningInputForRequest(req);
-  const presets = schedulePresetsForTags(tagNames(req.pcoTags), presetRules);
+  const tagPresets = schedulePresetsForTags(tagNames(req.pcoTags), presetRules);
+  const { presets } = effectiveSchedulePresetsForRequest(req, tagPresets);
+  const presetPlacements = schedulePresetPlacements(input, cfg, presets);
   const presetPlan = applySchedulePresetPlacementsToPlan(
     planEvent(input, cfg, new Date(), opts),
-    schedulePresetPlacements(input, cfg, presets),
+    presetPlacements,
+    schedulePresetChannelKeys(input, cfg, presets),
   );
   const plan = applyScheduleLocksToPlan(
     input,

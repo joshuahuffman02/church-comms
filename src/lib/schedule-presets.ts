@@ -1,14 +1,27 @@
 import { addDays, atMidnight, subDays, weekdaysBetween } from "@/lib/engine/dates";
 import type { ChannelConfig, ComputedDeliverable, ComputedTouch, EventInput } from "@/lib/engine/types";
 
+/** Kept as the serialized key so existing tag rules continue to work. */
 export const MONTHLY_FIRST_SUNDAY_FULL_RUN = "monthly_first_sunday_full_run";
+export const WEEK_OF_ONLY = "week_of_only";
+export const STANDARD_MULTI_WEEK = "standard_multi_week";
 
 export const SCHEDULE_PRESETS = [
   {
+    key: STANDARD_MULTI_WEEK,
+    label: "Standard multi-week promotion",
+    description: "Use the normal lead time for special events, registrations, trips, and larger opportunities.",
+  },
+  {
+    key: WEEK_OF_ONLY,
+    label: "Week of the event only",
+    description: "Keep regular weekly Rise/Thrive gatherings within the final seven days before the event.",
+  },
+  {
     key: MONTHLY_FIRST_SUNDAY_FULL_RUN,
-    label: "First Sunday video + weekly loop/email/website",
+    label: "Monthly spotlight",
     description:
-      "For monthly awareness items: put it in the announcement video on the first Sunday, then keep it in the loop, weekly email, and website each week that month.",
+      "Start on the first day of its named month, use the first Sunday video, and continue recurring channels through month-end—never the month before.",
   },
 ] as const;
 
@@ -19,18 +32,16 @@ type ScheduledChannelPlacement = {
   scheduledAt: Date;
 };
 
-type MonthlyChannelRule = {
-  key: string;
-  placement: "first_sunday" | "weekly";
-  fallbackWeekdays: number[];
+type RecommendationInput = {
+  title: string;
+  eventStart: Date;
+  needsRegistration?: boolean | null;
+  registrationClosesAt?: Date | null;
+  registrationUrl?: string | null;
 };
 
-const MONTHLY_FIRST_SUNDAY_RULES: MonthlyChannelRule[] = [
-  { key: "announcement_video", placement: "first_sunday", fallbackWeekdays: [0] },
-  { key: "loop", placement: "weekly", fallbackWeekdays: [0] },
-  { key: "email", placement: "weekly", fallbackWeekdays: [3] },
-  { key: "web", placement: "weekly", fallbackWeekdays: [1] },
-];
+const SPECIAL_YOUTH_EVENT =
+  /\b(love winona|champions?|registration|register|trip|conference|valleyfair|kick[ -]?off|overnight|costume|retreat|camp|mission|tournament|fundraiser)\b/i;
 
 export function isSchedulePresetKey(value: string | null | undefined): value is SchedulePresetKey {
   return SCHEDULE_PRESETS.some((preset) => preset.key === value);
@@ -40,10 +51,54 @@ export function schedulePresetLabel(key: string | null | undefined): string | nu
   return SCHEDULE_PRESETS.find((preset) => preset.key === key)?.label ?? null;
 }
 
+export function schedulePresetDescription(key: string | null | undefined): string | null {
+  return SCHEDULE_PRESETS.find((preset) => preset.key === key)?.description ?? null;
+}
+
+/**
+ * Routine Rise/Thrive gatherings are intentionally light-touch. Anything with
+ * registration, or a title that signals a special event, stays on the standard
+ * multi-week plan unless staff explicitly chooses another preset.
+ */
+export function recommendedSchedulePresetForRequest(
+  request: RecommendationInput,
+): SchedulePresetKey | null {
+  const youthTitle = /\b(rise|thrive)\b/i.test(request.title);
+  const weekday = atMidnight(request.eventStart).getDay();
+  const normalMeetingDay = weekday === 0 || weekday === 3;
+  const hasRegistration = Boolean(
+    request.needsRegistration || request.registrationClosesAt || request.registrationUrl?.trim(),
+  );
+
+  if (!youthTitle || !normalMeetingDay || hasRegistration || SPECIAL_YOUTH_EVENT.test(request.title)) {
+    return null;
+  }
+  return WEEK_OF_ONLY;
+}
+
+export function effectiveSchedulePresetsForRequest(
+  request: RecommendationInput & { schedulePreset?: string | null },
+  tagPresets: (string | null | undefined)[] = [],
+): { presets: SchedulePresetKey[]; source: "event" | "tag" | "automatic" | "standard" } {
+  if (isSchedulePresetKey(request.schedulePreset)) {
+    return { presets: [request.schedulePreset], source: "event" };
+  }
+  const validTagPresets = uniquePresetKeys(tagPresets);
+  if (validTagPresets.length > 0) return { presets: validTagPresets, source: "tag" };
+  const automatic = recommendedSchedulePresetForRequest(request);
+  return automatic
+    ? { presets: [automatic], source: "automatic" }
+    : { presets: [], source: "standard" };
+}
+
 function firstSundayOfMonth(anchor: Date): Date {
   let day = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   while (day.getDay() !== 0) day = addDays(day, 1);
   return atMidnight(day);
+}
+
+function firstDayOfMonth(anchor: Date): Date {
+  return atMidnight(new Date(anchor.getFullYear(), anchor.getMonth(), 1));
 }
 
 function lastDayOfMonth(anchor: Date): Date {
@@ -79,47 +134,84 @@ function addPlacement(
   out.push({ channel, scheduledAt: date });
 }
 
-export function schedulePresetChannelKeys(presets: (string | null | undefined)[]): Set<string> {
-  const keys = new Set<string>();
-  for (const preset of uniquePresetKeys(presets)) {
-    if (preset === MONTHLY_FIRST_SUNDAY_FULL_RUN) {
-      MONTHLY_FIRST_SUNDAY_RULES.forEach((rule) => keys.add(rule.key));
+function eligibleChannels(ev: Pick<EventInput, "tier">, channels: ChannelConfig[]): ChannelConfig[] {
+  return channels.filter((channel) => channel.tierEligibility.includes(ev.tier));
+}
+
+function monthlyPlacements(
+  ev: Pick<EventInput, "eventStart" | "tier">,
+  channels: ChannelConfig[],
+  out: ScheduledChannelPlacement[],
+  seen: Set<string>,
+) {
+  const monthStart = firstDayOfMonth(ev.eventStart);
+  const firstSunday = firstSundayOfMonth(ev.eventStart);
+  const monthEnd = lastDayOfMonth(ev.eventStart);
+
+  for (const channel of eligibleChannels(ev, channels)) {
+    if (channel.key === "announcement_video") {
+      addPlacement(out, seen, channel, firstSunday);
+      continue;
+    }
+    if (channel.type === "one_shot") {
+      addPlacement(out, seen, channel, monthStart);
+      continue;
+    }
+
+    const fallback = channel.type === "dated_instance" ? [0] : [monthStart.getDay()];
+    for (const day of weekdaysBetween(monthStart, monthEnd, cadenceWeekdays(channel, fallback))) {
+      addPlacement(out, seen, channel, day);
     }
   }
-  return keys;
+}
+
+function weekOfPlacements(
+  ev: Pick<EventInput, "eventStart" | "tier">,
+  channels: ChannelConfig[],
+  out: ScheduledChannelPlacement[],
+  seen: Set<string>,
+) {
+  const eventDay = atMidnight(ev.eventStart);
+  const windowStart = subDays(eventDay, 6);
+
+  for (const channel of eligibleChannels(ev, channels)) {
+    if (channel.type === "one_shot") {
+      const offset = Math.min(6, Math.max(0, channel.defaultPublishOffsetDays));
+      addPlacement(out, seen, channel, subDays(eventDay, offset));
+      continue;
+    }
+
+    const fallback = channel.type === "dated_instance" ? [0] : [eventDay.getDay()];
+    const candidates = weekdaysBetween(windowStart, eventDay, cadenceWeekdays(channel, fallback));
+    addPlacement(out, seen, channel, candidates.at(-1) ?? eventDay);
+  }
+}
+
+export function schedulePresetChannelKeys(
+  ev: Pick<EventInput, "tier">,
+  channels: ChannelConfig[],
+  presets: (string | null | undefined)[],
+): Set<string> {
+  const presetKeys = uniquePresetKeys(presets);
+  if (!presetKeys.some((preset) => preset === MONTHLY_FIRST_SUNDAY_FULL_RUN || preset === WEEK_OF_ONLY)) {
+    return new Set();
+  }
+  return new Set(eligibleChannels(ev, channels).map((channel) => channel.key));
 }
 
 export function schedulePresetPlacements(
-  ev: Pick<EventInput, "eventStart">,
+  ev: Pick<EventInput, "eventStart" | "tier">,
   channels: ChannelConfig[],
   presets: (string | null | undefined)[],
 ): ScheduledChannelPlacement[] {
   const presetKeys = uniquePresetKeys(presets);
   if (presetKeys.length === 0) return [];
 
-  const channelByKey = new Map(channels.map((channel) => [channel.key, channel]));
   const out: ScheduledChannelPlacement[] = [];
   const seen = new Set<string>();
-
   for (const preset of presetKeys) {
-    if (preset !== MONTHLY_FIRST_SUNDAY_FULL_RUN) continue;
-
-    const firstSunday = firstSundayOfMonth(ev.eventStart);
-    const monthEnd = lastDayOfMonth(ev.eventStart);
-
-    for (const rule of MONTHLY_FIRST_SUNDAY_RULES) {
-      const channel = channelByKey.get(rule.key);
-      if (!channel) continue;
-
-      if (rule.placement === "first_sunday") {
-        addPlacement(out, seen, channel, firstSunday);
-        continue;
-      }
-
-      for (const day of weekdaysBetween(firstSunday, monthEnd, cadenceWeekdays(channel, rule.fallbackWeekdays))) {
-        addPlacement(out, seen, channel, day);
-      }
-    }
+    if (preset === MONTHLY_FIRST_SUNDAY_FULL_RUN) monthlyPlacements(ev, channels, out, seen);
+    if (preset === WEEK_OF_ONLY) weekOfPlacements(ev, channels, out, seen);
   }
 
   return out.sort((a, b) => {
@@ -180,10 +272,11 @@ export function schedulePresetDeliverables(placements: ScheduledChannelPlacement
 export function applySchedulePresetPlacementsToPlan(
   plan: ComputedDeliverable[],
   placements: ScheduledChannelPlacement[],
+  replaceChannelKeys?: Set<string>,
 ): ComputedDeliverable[] {
-  if (placements.length === 0) return plan;
+  if (placements.length === 0 && (!replaceChannelKeys || replaceChannelKeys.size === 0)) return plan;
 
-  const replaceChannels = new Set(placements.map((placement) => placement.channel.key));
+  const replaceChannels = replaceChannelKeys ?? new Set(placements.map((placement) => placement.channel.key));
   return [
     ...plan.filter((deliverable) => !replaceChannels.has(deliverable.channelKey)),
     ...schedulePresetDeliverables(placements),
