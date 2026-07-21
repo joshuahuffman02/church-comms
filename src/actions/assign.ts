@@ -3,7 +3,8 @@
 import { db } from "@/lib/db";
 import { requireEditor } from "@/lib/authz";
 import { attachChannel } from "@/actions/quick-items";
-import { canAssign, defaultPublishDate, type AssignDeliverable } from "@/lib/assign";
+import { defaultPublishDate } from "@/lib/assign";
+import { atMidnight } from "@/lib/engine/dates";
 
 /** Local YYYY-MM-DD (church-local), to feed attachChannel's date field. */
 function isoDay(d: Date): string {
@@ -14,35 +15,64 @@ function isoDay(d: Date): string {
 }
 
 /**
- * Put an event on a channel at that channel's normal publish lead. Dedups
- * (no-op if already on the channel), then delegates to attachChannel — which
- * bypasses tier (manual override), schedules the touch, logs, and revalidates.
- * Returns the real deliverable id (new or existing) so callers can reconcile
- * optimistic tmp: ids, or null when request/channel not found.
+ * Put an event on a channel at that channel's normal publish lead. A current
+ * appearance is reused. When the only appearances are old, a new one is placed
+ * today (or at the normal lead date when that is still ahead), so Assign never
+ * creates fresh work in the past.
  */
-export async function assignChannel(requestId: string, channelId: string): Promise<string | null> {
+export type AssignChannelResult = {
+  deliverableId: string;
+  scheduledAtMs: number;
+  existing: boolean;
+};
+
+export async function assignChannelPlacement(requestId: string, channelId: string): Promise<AssignChannelResult | null> {
   await requireEditor();
 
-  const [request, channel, dels] = await Promise.all([
+  const today = atMidnight(new Date());
+  const [request, channel, existingTouch] = await Promise.all([
     db.request.findUnique({ where: { id: requestId }, select: { eventStart: true } }),
-    db.channel.findUnique({ where: { id: channelId }, select: { defaultPublishOffsetDays: true } }),
-    db.deliverable.findMany({ where: { requestId }, select: { id: true, requestId: true, channelId: true, status: true } }),
+    db.channel.findFirst({ where: { id: channelId, active: true }, select: { defaultPublishOffsetDays: true } }),
+    db.touch.findFirst({
+      where: {
+        channelId,
+        scheduledAt: { gte: today },
+        NOT: { status: "skipped" },
+        deliverable: { requestId, NOT: { status: "skipped" } },
+      },
+      orderBy: { scheduledAt: "asc" },
+      select: { scheduledAt: true, deliverableId: true },
+    }),
   ]);
   if (!request || !channel) return null;
-
-  const existing: AssignDeliverable[] = dels.map((d) => ({ ...d, publishMs: null }));
-  if (canAssign(existing, requestId, channelId)) {
-    const date = defaultPublishDate(request.eventStart, channel.defaultPublishOffsetDays);
-    const fd = new FormData();
-    fd.set("channelId", channelId);
-    fd.set("date", isoDay(date));
-    await attachChannel(requestId, fd);
+  if (existingTouch) {
+    return {
+      deliverableId: existingTouch.deliverableId,
+      scheduledAtMs: existingTouch.scheduledAt.getTime(),
+      existing: true,
+    };
   }
 
-  // Always return the current (or newly created) non-skipped deliverable id.
-  const placed = await db.deliverable.findFirst({
-    where: { requestId, channelId, NOT: { status: "skipped" } },
-    select: { id: true },
+  const normalDate = defaultPublishDate(request.eventStart, channel.defaultPublishOffsetDays);
+  const date = normalDate < today ? today : normalDate;
+  const fd = new FormData();
+  fd.set("channelId", channelId);
+  fd.set("date", isoDay(date));
+  await attachChannel(requestId, fd);
+
+  const placed = await db.touch.findFirst({
+    where: {
+      channelId,
+      scheduledAt: date,
+      deliverable: { requestId, NOT: { status: "skipped" } },
+    },
+    select: { deliverableId: true },
   });
-  return placed?.id ?? null;
+  return placed ? { deliverableId: placed.deliverableId, scheduledAtMs: date.getTime(), existing: false } : null;
+}
+
+/** Backwards-compatible event-page helper. */
+export async function assignChannel(requestId: string, channelId: string): Promise<string | null> {
+  const result = await assignChannelPlacement(requestId, channelId);
+  return result?.deliverableId ?? null;
 }
