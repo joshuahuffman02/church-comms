@@ -16,7 +16,13 @@ import {
 const fmtDate = (d: Date) =>
   d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
-export default async function RecurringPage() {
+export default async function RecurringPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ created?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const createdId = Array.isArray(params.created) ? params.created[0] : params.created;
   const today = atMidnight(new Date());
   const [seriesRows, ministries, user] = await Promise.all([
     db.recurringSeries.findMany({
@@ -69,6 +75,13 @@ export default async function RecurringPage() {
         Define a standing item once — its individual events generate automatically.
       </p>
 
+      {createdId && rows.some((row) => row.id === createdId) && (
+        <div role="status" className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm text-emerald-900">
+          <p className="font-bold">Recurring series created.</p>
+          <p className="mt-1">The existing events and their channel work were kept, and future missing dates will now generate automatically.</p>
+        </div>
+      )}
+
       {canEdit ? (
         <section className="card-float p-6 mb-6">
           <h2 className="text-lg font-extrabold mb-1">New recurring series</h2>
@@ -106,7 +119,9 @@ export default async function RecurringPage() {
         {rows.map((r) => (
           <div
             key={r.id}
-            className={`grid gap-3 px-5 py-4 border-t border-slate-100 items-center ${
+            className={`grid gap-3 px-5 py-4 border-t items-center ${
+              r.id === createdId ? "border-emerald-200 bg-emerald-50/50" : "border-slate-100"
+            } ${
               canEdit ? "sm:grid-cols-[1.6fr_1fr_auto]" : "sm:grid-cols-[1.6fr_1fr]"
             }`}
           >

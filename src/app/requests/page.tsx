@@ -51,6 +51,7 @@ export default async function RequestsIndex({
       externalCalendarKey: true,
       noPromo: true,
       needsRegistration: true,
+      seriesId: true,
       owner: { select: { name: true } },
       ministries: {
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -102,6 +103,7 @@ export default async function RequestsIndex({
       needsRegistration: r.needsRegistration,
       ownerName: r.owner?.name ?? null,
       source: r.externalCalendarKey !== null ? "calendar" : r.pcoEventId !== null ? "pco" : "local",
+      seriesId: r.seriesId,
     };
   });
 

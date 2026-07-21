@@ -18,7 +18,7 @@ const WEEKDAYS = [
  * `createSeries` server action, which validates + generates the first batch.
  */
 export function SeriesForm({ ministries }: { ministries: { id: string; name: string }[] }) {
-  const [frequency, setFrequency] = useState<"weekly" | "monthly">("weekly");
+  const [frequency, setFrequency] = useState<"daily" | "weekly" | "monthly">("weekly");
   const field = "rounded-2xl border px-4 py-2";
 
   return (
@@ -55,9 +55,10 @@ export function SeriesForm({ ministries }: { ministries: { id: string; name: str
           <select
             name="frequency"
             value={frequency}
-            onChange={(e) => setFrequency(e.target.value as "weekly" | "monthly")}
+            onChange={(e) => setFrequency(e.target.value as "daily" | "weekly" | "monthly")}
             className={field}
           >
+            <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="monthly">Monthly</option>
           </select>
@@ -73,7 +74,9 @@ export function SeriesForm({ ministries }: { ministries: { id: string; name: str
               defaultValue={1}
               className={`${field} w-20`}
             />
-            <span className="text-sm text-muted">{frequency === "weekly" ? "week(s)" : "month(s)"}</span>
+            <span className="text-sm text-muted">
+              {frequency === "daily" ? "day(s)" : frequency === "weekly" ? "week(s)" : "month(s)"}
+            </span>
           </div>
         </label>
         {frequency === "weekly" ? (
@@ -88,7 +91,7 @@ export function SeriesForm({ ministries }: { ministries: { id: string; name: str
               ))}
             </select>
           </label>
-        ) : (
+        ) : frequency === "monthly" ? (
           <label className="grid gap-1 text-sm text-muted">
             On day of month
             <input
@@ -100,6 +103,10 @@ export function SeriesForm({ ministries }: { ministries: { id: string; name: str
               className={field}
             />
           </label>
+        ) : (
+          <div className="self-end rounded-2xl bg-sky-bg/60 px-4 py-3 text-sm text-muted">
+            Repeats from the start date every selected number of days.
+          </div>
         )}
       </div>
 

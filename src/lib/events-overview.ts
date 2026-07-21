@@ -3,6 +3,7 @@ export type EventOverviewItem = {
   title: string;
   status: string;
   eventStartMs: number;
+  seriesId?: string | null;
 };
 
 export type EventDuplicateGroup<T extends EventOverviewItem> = {
@@ -88,6 +89,9 @@ export function groupRepeatedEventTitles<T extends EventOverviewItem>(
 ): EventRepeatGroup<T>[] {
   const groups = new Map<string, T[]>();
   for (const row of rows) {
+    // Once a repeated import is managed by RecurringSeries it no longer needs
+    // cleanup on the Events page; its occurrences remain visible in All upcoming.
+    if (row.seriesId) continue;
     const key = normalizeEventTitle(row.title);
     if (!key) continue;
     const group = groups.get(key) ?? [];
