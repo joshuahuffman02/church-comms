@@ -1,10 +1,22 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
+  fetchUpcomingPcoEvents,
   parsePcoEventInstances,
   parseResourceRequestStatuses,
   reduceRoomStatus,
   type PcoEvent,
 } from "../src/lib/pco";
+
+const originalPcoToken = process.env.PCO_TOKEN;
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  if (originalPcoToken === undefined) {
+    delete process.env.PCO_TOKEN;
+  } else {
+    process.env.PCO_TOKEN = originalPcoToken;
+  }
+});
 
 // A realistic PCO Calendar JSON:API payload for `GET /calendar/v2/event_instances`
 // with `include=event,resource_bookings`. `data` is event_instance[]; `included`
@@ -218,6 +230,51 @@ describe("parseResourceRequestStatuses", () => {
   it("is graceful on empty / malformed payloads", () => {
     expect(parseResourceRequestStatuses({})).toEqual([]);
     expect(parseResourceRequestStatuses(null)).toEqual([]);
+  });
+});
+
+describe("fetchUpcomingPcoEvents", () => {
+  function mockPcoPages() {
+    process.env.PCO_TOKEN = "test-token";
+    const pageOne = {
+      ...fixture,
+      data: [fixture.data[0]],
+      links: {
+        next: "https://api.planningcenteronline.com/calendar/v2/event_instances?offset=50",
+      },
+    };
+    const pageTwo = {
+      ...fixture,
+      data: [fixture.data[1]],
+      links: {},
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(pageOne))
+      .mockResolvedValueOnce(Response.json(pageTwo));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("fetches one page by default", async () => {
+    const fetchMock = mockPcoPages();
+
+    const events = await fetchUpcomingPcoEvents();
+
+    expect(events.map((event) => event.pcoEventId)).toEqual(["inst-approved"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("can follow Planning Center pagination for background syncs", async () => {
+    const fetchMock = mockPcoPages();
+
+    const events = await fetchUpcomingPcoEvents({ maxPages: "all" });
+
+    expect(events.map((event) => event.pcoEventId)).toEqual([
+      "inst-approved",
+      "inst-pending",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 

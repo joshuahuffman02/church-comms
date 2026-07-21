@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { createTagRule, updateTagRule } from "@/actions/tag-rules";
 import { TagRuleDeleteButton } from "@/components/tag-rule-delete-button";
+import { SCHEDULE_PRESETS } from "@/lib/schedule-presets";
 
 const TIERS = [1, 2, 3];
 
@@ -69,7 +70,10 @@ export default async function TagRulesSettings() {
         the event out of the comms queue. A{" "}
         <b className="text-ink">suggested checklist</b> surfaces a one-click
         &ldquo;apply this checklist?&rdquo; hint on a matching event (e.g. a
-        &ldquo;Sermon Series&rdquo; tag offers the Sermon Series checklist).
+        &ldquo;Sermon Series&rdquo; tag offers the Sermon Series checklist). A{" "}
+        <b className="text-ink">schedule preset</b> can place matching events on
+        specific outputs, such as first-Sunday video plus weekly loop, email, and
+        website.
       </p>
 
       {rules.length === 0 && (
@@ -144,6 +148,22 @@ export default async function TagRulesSettings() {
             </select>
           </label>
 
+          <label className="text-sm text-muted">
+            Schedule
+            <select
+              name="schedulePreset"
+              defaultValue={r.schedulePreset ?? ""}
+              className={`${selectCls} ml-1 max-w-[18rem]`}
+            >
+              <option value="">— normal —</option>
+              {SCHEDULE_PRESETS.map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <div className="ml-auto flex items-center gap-2">
             <button className="rounded-full bg-ink text-white px-4 py-1 text-sm font-semibold">
               Save
@@ -205,6 +225,17 @@ export default async function TagRulesSettings() {
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-muted">
+            Schedule
+            <select name="schedulePreset" defaultValue="" className={`${selectCls} ml-1 max-w-[18rem]`}>
+              <option value="">— normal —</option>
+              {SCHEDULE_PRESETS.map((preset) => (
+                <option key={preset.key} value={preset.key}>
+                  {preset.label}
                 </option>
               ))}
             </select>

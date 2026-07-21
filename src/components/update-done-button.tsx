@@ -1,5 +1,5 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { setUpdateStatus } from "@/actions/updates";
 
 /**
@@ -8,21 +8,38 @@ import { setUpdateStatus } from "@/actions/updates";
  * by the This Week board and the Run Sheet so a phase can be ticked off as the
  * message goes out.
  */
-export function UpdateDoneButton({ id, done }: { id: string; done: boolean }) {
-  const [checked, setChecked] = useState(done);
+export function UpdateDoneButton({ id, done, label }: { id: string; done: boolean; label: string }) {
+  const [checked, setChecked] = useOptimistic(done);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   return (
-    <input
-      type="checkbox"
-      checked={checked}
-      disabled={pending}
-      aria-label="Mark message update done"
-      onChange={(e) => {
-        const v = e.target.checked;
-        setChecked(v); // optimistic
-        start(() => setUpdateStatus(id, v ? "done" : "planned"));
-      }}
-      className="rs-checkbox mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-emerald-500 disabled:opacity-50"
-    />
+    <span className="inline-flex shrink-0 flex-col items-center">
+      <label className="grid h-11 w-11 cursor-pointer place-items-center rounded-xl hover:bg-emerald-50">
+        <input
+          type="checkbox"
+          checked={checked}
+          disabled={pending}
+          aria-label={`${checked ? "Mark not done" : "Mark done"}: ${label}`}
+          onChange={(e) => {
+            const next = e.target.checked;
+            setError(null);
+            start(async () => {
+              setChecked(next);
+              try {
+                await setUpdateStatus(id, next ? "done" : "planned");
+              } catch {
+                setError("Not saved");
+              }
+            });
+          }}
+          className="rs-checkbox h-5 w-5 shrink-0 cursor-pointer accent-emerald-600 disabled:opacity-50"
+        />
+      </label>
+      {error && (
+        <span role="alert" className="mt-0.5 text-[9px] font-bold text-red-700">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }

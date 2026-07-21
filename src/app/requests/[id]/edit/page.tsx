@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/authz";
 import { isEditor } from "@/lib/roles";
 import { updateEvent } from "@/actions/edit-event";
 import { AccessRequiredCard } from "@/components/access-required-card";
+import { PromotionScheduleSelect } from "@/components/promotion-schedule-select";
 
 /**
  * `YYYY-MM-DD` for a <input type="date"> default value, using local getters so
@@ -120,6 +121,8 @@ export default async function EditEvent({ params }: { params: Promise<{ id: stri
         defaultValue={dateValue(request.eventStart)}
         className="rounded-2xl border px-4 py-2"
       />
+
+      <PromotionScheduleSelect defaultValue={request.schedulePreset} />
 
       <details className="rounded-2xl border px-4 py-3">
         <summary className="cursor-pointer select-none text-sm font-semibold text-muted">

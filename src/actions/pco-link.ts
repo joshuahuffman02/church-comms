@@ -28,8 +28,11 @@ function revalidateLinkSurfaces(requestId: string) {
   revalidatePath(`/requests/${requestId}`);
   revalidatePath("/requests");
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/outputs");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
   revalidatePath("/import/planning-center");
 }
 

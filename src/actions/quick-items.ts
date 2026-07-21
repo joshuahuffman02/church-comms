@@ -114,8 +114,10 @@ export async function createQuickItem(fd: FormData) {
   revalidatePath("/outputs");
   revalidatePath(`/outputs/${channel.key}`);
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/requests");
+  revalidatePath("/guardrails");
 }
 
 /**
@@ -140,6 +142,20 @@ export async function attachChannel(requestId: string, fd: FormData) {
   ]);
   if (!request) throw new Error("Request not found");
   if (!channel) throw new Error("Channel not found");
+
+  // Manual placement is intentionally idempotent. The same event/date/channel
+  // can be submitted from the event page, Assign, or the channel page; those
+  // paths should converge on one appearance instead of quietly creating
+  // duplicate rows.
+  const existingTouch = await db.touch.findFirst({
+    where: {
+      channelId,
+      scheduledAt: date,
+      deliverable: { requestId },
+    },
+    select: { id: true },
+  });
+  if (existingTouch) return;
 
   const productionDueAt = subDays(date, channel.productionLeadDays);
   const placement = placementFor(channel.type, date);
@@ -178,6 +194,9 @@ export async function attachChannel(requestId: string, fd: FormData) {
   revalidatePath("/outputs");
   revalidatePath(`/outputs/${channel.key}`);
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/guardrails");
   revalidatePath("/assign");
 }
 

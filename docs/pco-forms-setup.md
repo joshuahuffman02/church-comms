@@ -53,6 +53,8 @@ Use a small override/playbook group:
 
 - `Room Only` -> force no-promo
 - `Mission Trip` -> suggest the Mission Trip playbook
+- `Missionary of the Month` -> first-Sunday announcement video, then weekly
+  loop, weekly email, and website placements for that month
 - `Sermon Series` -> suggest the Sermon Series playbook and no-promo channel
   planning
 

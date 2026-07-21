@@ -26,6 +26,14 @@ import { isEditor } from "@/lib/roles";
 import { classifyByTags, type TagRule } from "@/lib/tag-rules";
 import { SuggestedPlaybook } from "@/components/suggested-playbook";
 import { pcoStatusLabel, tierLabel, tierTitle } from "@/lib/labels";
+import { scheduleLockKey } from "@/lib/schedule-locks";
+import { loadAnnouncementVideoLineup } from "@/lib/announcement-video";
+import {
+  effectiveSchedulePresetsForRequest,
+  schedulePresetDescription,
+  schedulePresetLabel,
+  STANDARD_MULTI_WEEK,
+} from "@/lib/schedule-presets";
 import Link from "next/link";
 
 const APPROVAL_STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -77,6 +85,9 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         tasks: {
           orderBy: [{ dueAt: "asc" }, { sortOrder: "asc" }],
         },
+        scheduleLocks: {
+          select: { id: true, requestId: true, channelId: true, scheduledAt: true },
+        },
       },
     }),
     db.user.findMany({
@@ -103,6 +114,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         noPromo: true,
         missionTrip: true,
         suggestedTemplateId: true,
+        schedulePreset: true,
       },
     }),
     db.activityLog.findMany({
@@ -137,17 +149,36 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
   // for the old mission-trip-specific hint — any tag can suggest any playbook).
   // Resolve each suggested id to an active template name; skip inactive/missing.
   const tagRules: TagRule[] = tagRuleRows;
+  const classification = classifyByTags(pcoTags, tagRules);
   const templatesById = new Map(activeTemplates.map((t) => [t.id, t.name]));
-  const suggestedPlaybooks = classifyByTags(pcoTags, tagRules)
+  const suggestedPlaybooks = classification
     .suggestedTemplateIds.map((tid) => ({ id: tid, name: templatesById.get(tid) }))
     .filter((p): p is { id: string; name: string } => p.name != null);
+  const effectiveSchedule = effectiveSchedulePresetsForRequest(request, classification.schedulePresets);
+  const primarySchedulePreset = effectiveSchedule.presets[0] ?? STANDARD_MULTI_WEEK;
+  const promotionTimingLabel = schedulePresetLabel(primarySchedulePreset) ?? "Standard multi-week promotion";
+  const promotionTimingDescription = schedulePresetDescription(primarySchedulePreset);
+  const promotionTimingSource = effectiveSchedule.source === "event"
+    ? "chosen for this event"
+    : effectiveSchedule.source === "tag"
+      ? "from its event tag"
+      : effectiveSchedule.source === "automatic"
+        ? "chosen automatically"
+        : "automatic standard";
 
   const guardrails = await getGuardrailsForRequest(id);
+  const lockIdByPlacement = new Map(
+    request.scheduleLocks.map((lock) => [
+      scheduleLockKey(lock.requestId, lock.channelId, lock.scheduledAt),
+      lock.id,
+    ]),
+  );
 
   const rows: DeliverableRow[] = request.deliverables.map((d) => {
     const sortedTouches = [...d.touches].sort(
       (a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime()
     );
+    const firstTouch = sortedTouches[0] ?? null;
     // Effective owner: the deliverable's own owner, else the request's owner.
     const ownerId = effectiveOwnerId(d, request);
     const ownerName = d.owner?.name ?? request.owner?.name ?? null;
@@ -163,7 +194,11 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       lockLeadDays: d.channel.lockLeadDays,
       skippedReason: d.skippedReason,
       touchCount: d.touches.length,
-      firstTouchAt: sortedTouches[0]?.scheduledAt ?? null,
+      firstTouchId: firstTouch?.id ?? null,
+      firstTouchAt: firstTouch?.scheduledAt ?? null,
+      firstTouchLockId: firstTouch
+        ? lockIdByPlacement.get(scheduleLockKey(request.id, d.channelId, firstTouch.scheduledAt)) ?? null
+        : null,
       assetLink: d.assetLink,
       effectiveOwnerId: ownerId,
       effectiveOwnerName: ownerName,
@@ -187,11 +222,8 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
   // Is this event already on THIS coming Sunday's announcement video?
   const comingSun = atMidnight(comingSunday(new Date()));
   const comingSundayLabel = comingSun.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const featuredThisSunday = request.deliverables.some(
-    (d) =>
-      d.channel.key === "announcement_video" &&
-      d.touches.some((t) => atMidnight(t.scheduledAt).getTime() === comingSun.getTime()),
-  );
+  const comingLineup = await loadAnnouncementVideoLineup(comingSun);
+  const featuredThisSunday = comingLineup.entries.some((entry) => entry.requestId === request.id);
 
   const assetRows: AssetRow[] = request.assets.map((a) => ({
     id: a.id,
@@ -332,6 +364,23 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
           {registrationCloseLine && <div>📝 Signups close {registrationCloseLine}</div>}
           {registrationCloseLine && (
             <div>📣 Ad schedule runs back from signup close</div>
+          )}
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-sky-100 bg-sky-bg/50 px-4 py-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-ink">Promotion timing: {promotionTimingLabel}</span>
+            <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-muted">
+              {promotionTimingSource}
+            </span>
+            {canEdit && (
+              <Link href={`/requests/${request.id}/edit`} className="ml-auto font-semibold text-sky-700 hover:underline">
+                Change timing →
+              </Link>
+            )}
+          </div>
+          {promotionTimingDescription && (
+            <p className="mt-1 text-xs leading-relaxed text-muted">{promotionTimingDescription}</p>
           )}
         </div>
 

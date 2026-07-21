@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { atMidnight } from "./engine/dates";
+import { addDays, atMidnight } from "./engine/dates";
 import { weekRange } from "./week";
 
 /**
@@ -45,6 +45,7 @@ export type MyTask = {
   requestTitle: string;
   channelName: string;
   channelColor: string;
+  eventStart: Date;
   status: string;
   productionDueAt: Date | null;
   /** True when this deliverable's owner is explicit (vs. inherited from the request). */
@@ -61,7 +62,63 @@ export type MyTasksResult = {
 };
 
 /** Statuses that count as "done" — they never show as overdue or upcoming work. */
-const DONE = new Set(["ready", "scheduled", "published", "skipped"]);
+const DONE_STATUSES = ["ready", "scheduled", "published", "skipped"];
+const DONE = new Set(DONE_STATUSES);
+
+type DatedPlacement = { scheduledAt: Date };
+
+/**
+ * A dated channel stops being actionable after its final placement has passed.
+ * Deliverables without touches remain visible because they may be legitimate
+ * unscheduled work that still needs attention.
+ */
+export function hasCurrentPlacement(touches: DatedPlacement[], today: Date): boolean {
+  if (touches.length === 0) return true;
+  const day = atMidnight(today);
+  return touches.some((touch) => atMidnight(touch.scheduledAt) >= day);
+}
+
+export type MyTasksFocus = {
+  recentOverdue: MyTask[];
+  oldBacklog: MyTask[];
+  nearTerm: MyTask[];
+  later: MyTask[];
+  actionTotal: number;
+};
+
+/**
+ * Keep the daily view bounded without losing work. Recently overdue means the
+ * previous two weeks; coming next means the next 30 days. Older/farther items
+ * remain counted and available, but do not become a wall on first load.
+ */
+export function focusMyTasks(
+  tasks: MyTasksResult,
+  today: Date,
+  recentDays = 14,
+  upcomingDays = 30,
+): MyTasksFocus {
+  const day = atMidnight(today);
+  const recentCutoff = addDays(day, -recentDays);
+  const upcomingCutoff = addDays(day, upcomingDays);
+  const recentOverdue = tasks.overdue.filter(
+    (task) => task.productionDueAt && atMidnight(task.productionDueAt) >= recentCutoff,
+  );
+  const recentIds = new Set(recentOverdue.map((task) => task.id));
+  const oldBacklog = tasks.overdue.filter((task) => !recentIds.has(task.id));
+  const nearTerm = tasks.upcoming.filter(
+    (task) => task.productionDueAt && atMidnight(task.productionDueAt) <= upcomingCutoff,
+  );
+  const nearIds = new Set(nearTerm.map((task) => task.id));
+  const later = tasks.upcoming.filter((task) => !nearIds.has(task.id));
+
+  return {
+    recentOverdue,
+    oldBacklog,
+    nearTerm,
+    later,
+    actionTotal: recentOverdue.length + tasks.thisWeek.length + tasks.awaitingProof.length,
+  };
+}
 
 /**
  * Decide which bucket a single task falls into, given today.
@@ -104,11 +161,13 @@ export function bucketForTask(
 export async function myTasks(userId: string, today: Date): Promise<MyTasksResult> {
   const deliverables = await db.deliverable.findMany({
     where: {
+      status: { notIn: DONE_STATUSES },
       OR: [{ ownerId: userId }, { request: { ownerId: userId } }],
     },
     include: {
       channel: { select: { name: true, color: true } },
-      request: { select: { id: true, title: true, ownerId: true } },
+      request: { select: { id: true, title: true, ownerId: true, eventStart: true } },
+      touches: { select: { scheduledAt: true } },
     },
     orderBy: { productionDueAt: "asc" },
   });
@@ -125,6 +184,10 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
     // Effective-owner guard: a deliverable explicitly owned by someone else
     // must not appear just because the request is mine.
     if (effectiveOwnerId(d, d.request) !== userId) continue;
+    // A one-shot or multi-week placement is no longer useful here once every
+    // scheduled appearance is in the past. Do not turn expired advertising
+    // opportunities into permanent overdue production tasks.
+    if (!hasCurrentPlacement(d.touches, today)) continue;
 
     const bucket = bucketForTask(d, today);
     if (!bucket) continue;
@@ -135,6 +198,7 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
       requestTitle: d.request.title,
       channelName: d.channel.name,
       channelColor: d.channel.color,
+      eventStart: d.request.eventStart,
       status: d.status,
       productionDueAt: d.productionDueAt,
       explicitOwner: d.ownerId != null,

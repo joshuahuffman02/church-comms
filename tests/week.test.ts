@@ -47,11 +47,25 @@ describe("loopChangesForSunday", () => {
   it("adds loop items entering their window and removes those whose window passed", () => {
     const sunday = atMidnight(new Date("2026-06-07"));
     const touches = [
-      { scheduledAt: atMidnight(new Date("2026-06-07")), request: { title: "VBS" } },     // appears this Sunday → add
-      { scheduledAt: atMidnight(new Date("2026-05-31")), request: { title: "Memorial" } }, // last week → remove
+      { scheduledAt: atMidnight(new Date("2026-06-07")), request: { id: "vbs", title: "VBS" } },
+      { scheduledAt: atMidnight(new Date("2026-05-31")), request: { id: "memorial", title: "Memorial" } },
     ];
     const { add, remove } = loopChangesForSunday(touches, sunday);
     expect(add.map(t => t.request.title)).toEqual(["VBS"]);
     expect(remove.map(t => t.request.title)).toEqual(["Memorial"]);
+  });
+
+  it("does not call a slide an add and a removal when it continues", () => {
+    const sunday = atMidnight(new Date("2026-06-07"));
+    const touches = [
+      { scheduledAt: atMidnight(new Date("2026-05-31")), request: { id: "vbs", title: "VBS" } },
+      { scheduledAt: atMidnight(new Date("2026-06-07")), request: { id: "vbs", title: "VBS" } },
+      { scheduledAt: atMidnight(new Date("2026-05-31")), request: { id: "old", title: "Community Night" } },
+      { scheduledAt: atMidnight(new Date("2026-06-07")), request: { id: "new", title: "Community Night" } },
+    ];
+
+    const { add, remove } = loopChangesForSunday(touches, sunday);
+    expect(add.map((touch) => touch.request.id)).toEqual(["new"]);
+    expect(remove.map((touch) => touch.request.id)).toEqual(["old"]);
   });
 });

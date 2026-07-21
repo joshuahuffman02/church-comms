@@ -22,6 +22,7 @@
     "check": "npm run lint && npm test && npm run build",
     "backup": "bash scripts/backup-db.sh",
     "update:production": "bash scripts/update-production.sh",
+    "sync:events": "tsx scripts/sync-events.ts",
     "db:prepare": "tsx scripts/prepare-db.ts",
     "db:deploy": "prisma migrate deploy"
   },
@@ -32,6 +33,7 @@
     "@prisma/client": "^7.8.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.10.0",
+    "lucide-react": "^1.25.0",
     "next": "16.2.7",
     "next-auth": "^5.0.0-beta.31",
     "nodemailer": "9.0.1",
@@ -39,6 +41,8 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@emnapi/core": "^1.11.2",
+    "@emnapi/runtime": "^1.11.2",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",

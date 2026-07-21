@@ -19,7 +19,18 @@ function touch(
   id: string,
   channelId: string,
   scheduledAt: Date,
-  opts: Partial<{ title: string; nextStepText: string | null; content: string | null; status: string; touchStatus: string; ministries: { name: string; color: string }[]; requestId: string; tier: number; eventStart: Date }> = {}
+  opts: Partial<{
+    title: string;
+    nextStepText: string | null;
+    content: string | null;
+    status: string;
+    touchStatus: string;
+    ministries: { name: string; color: string }[];
+    requestId: string;
+    tier: number;
+    eventStart: Date;
+    registrationClosesAt: Date | null;
+  }> = {}
 ): LoadedTouch {
   return {
     id,
@@ -27,12 +38,14 @@ function touch(
     scheduledAt,
     content: opts.content ?? null,
     status: opts.touchStatus ?? "scheduled",
+    removedAt: null,
     deliverable: {
       status: opts.status ?? "to_design",
       request: {
         id: opts.requestId ?? `req_${id}`,
         tier: opts.tier ?? 1,
         eventStart: opts.eventStart ?? scheduledAt,
+        registrationClosesAt: opts.registrationClosesAt ?? null,
         title: opts.title ?? "An Event",
         nextStepText: opts.nextStepText ?? null,
         ministries: opts.ministries ?? [],
@@ -122,6 +135,34 @@ describe("groupTouchesByChannel", () => {
     ];
     const social = groupTouchesByChannel(channels, weekTouches, sunday).find((c) => c.key === "social")!;
     expect(social.items.map((i) => i.done)).toEqual([true, false]);
+  });
+
+  it("carries the actual event day and optional registration due date through to the row", () => {
+    const eventStart = atMidnight(new Date("2026-07-19"));
+    const registrationClosesAt = atMidnight(new Date("2026-07-12"));
+    const weekTouches = [
+      touch("dates", "ch_social", sunday, {
+        title: "Kids Camp",
+        eventStart,
+        registrationClosesAt,
+      }),
+    ];
+
+    const item = groupTouchesByChannel(channels, weekTouches, sunday).find((c) => c.key === "social")!.items[0];
+    expect(item.eventStart).toEqual(eventStart);
+    expect(item.registrationClosesAt).toEqual(registrationClosesAt);
+  });
+
+  it("carries the owning request id so run-sheet rows can link to the event", () => {
+    const weekTouches = [
+      touch("link-row", "ch_social", sunday, {
+        title: "Open Me",
+        requestId: "request-open-me",
+      }),
+    ];
+
+    const item = groupTouchesByChannel(channels, weekTouches, sunday).find((c) => c.key === "social")!.items[0];
+    expect(item.requestId).toBe("request-open-me");
   });
 
   it("returns an empty item list for a channel with no touches that week", () => {

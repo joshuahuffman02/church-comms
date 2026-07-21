@@ -17,6 +17,7 @@ model User {
   requested     Request[]      @relation("requester")
   owned         Request[]      @relation("owner")
   ownedDeliverables Deliverable[] @relation("deliverableOwner")
+  createdScheduleLocks ScheduleLock[] @relation("scheduleLockCreator")
   approvalRules ApprovalRule[]
   approvals     Approval[]
   activityLogs  ActivityLog[]
@@ -79,6 +80,9 @@ model Ministry {
 ///                        Sermon Series checklist). Surfaced as a hint on the
 ///                        event; never auto-applied. FK SetNull so deleting a
 ///                        playbook leaves the rule intact, just without a suggestion.
+///   schedulePreset     — optional channel placement preset for matching tags,
+///                        e.g. monthly awareness items that need first-Sunday
+///                        video plus weekly loop/email/web placements.
 /// `tag` is unique (one rule per PCO tag string); matching is case-insensitive.
 model EventTagRule {
   id                  String         @id @default(cuid())
@@ -90,11 +94,13 @@ model EventTagRule {
   missionTrip         Boolean        @default(false)
   suggestedTemplateId String?
   suggestedTemplate   EventTemplate? @relation(fields: [suggestedTemplateId], references: [id], onDelete: SetNull)
+  schedulePreset      String?
   sortOrder           Int            @default(0)
   createdAt           DateTime       @default(now())
 
   @@index([ministryId])
   @@index([suggestedTemplateId])
+  @@index([schedulePreset])
 }
 
 model Channel {
@@ -121,6 +127,7 @@ model Channel {
   productionNotes          String?
   deliverables             Deliverable[]
   touches                  Touch[]
+  scheduleLocks            ScheduleLock[]
 }
 
 model Request {
@@ -176,6 +183,9 @@ model Request {
   cost                 String?
   capacity             Int?
   registrationClosesAt DateTime?
+  // Optional per-event promotion timing override. Null lets tag rules and the
+  // routine Rise/Thrive recommendation choose; a saved value always wins.
+  schedulePreset       String?
   roomBooked           String?
   nextStepText         String?
   nextStepUrl          String?
@@ -194,8 +204,10 @@ model Request {
   updates              EventUpdate[]
   tasks                EventTask[]
   videoTop3            VideoTop3Item[]
+  scheduleLocks        ScheduleLock[]
 
   @@index([seriesId])
+  @@index([schedulePreset])
 }
 
 /// An ignored occurrence from a local/external iCal import preview. This is the
@@ -271,6 +283,7 @@ model EventUpdate {
   createdAt    DateTime @default(now())
 
   @@index([requestId, scheduledFor])
+  @@index([scheduledFor, status])
 }
 
 /// An "Event Playbook": a reusable, dated admin CHECKLIST template (e.g.
@@ -327,6 +340,7 @@ model EventTask {
   createdAt DateTime @default(now())
 
   @@index([requestId])
+  @@index([dueAt, status])
 }
 
 /// A standing item (e.g. "Missionary of the Month", "Tuesday Talks") defined
@@ -343,7 +357,7 @@ model RecurringSeries {
   whoIsItFor   String    @default("whole_church")
   nextStepText String?
   location     String?
-  frequency    String // "weekly" | "monthly"
+  frequency    String // "daily" | "weekly" | "monthly"
   interval     Int       @default(1)
   weekday      Int? // 0=Sun..6=Sat, for weekly (null = startDate's weekday)
   dayOfMonth   Int? // 1-31, for monthly (null = startDate's day; clamped to month length)
@@ -398,6 +412,8 @@ model VideoTop3Item {
   createdAt DateTime @default(now())
 
   @@index([sunday])
+  @@unique([sunday, sortOrder])
+  @@unique([sunday, requestId])
 }
 
 model Asset {
@@ -430,6 +446,8 @@ model Deliverable {
   touches         Touch[]
 
   @@index([ownerId])
+  @@index([productionDueAt, status])
+  @@index([channelId, productionDueAt])
 }
 
 model Touch {
@@ -441,12 +459,40 @@ model Touch {
   scheduledAt   DateTime
   purposeLabel  String?
   status        String      @default("scheduled") // scheduled|published|skipped
+  // Loop removals are a different action from publishing the original Sunday
+  // placement. Keeping their completion timestamp separate prevents a removal
+  // checkbox from rewriting the prior touch's publication state.
+  removedAt     DateTime?
   // Per-week editable content: lets the SAME deliverable carry different copy /
   // graphic / note on each weekly appearance (e.g. the Jun 7 loop slide differs
   // from Jun 14). Empty/null falls back to the event-level defaults in exports.
   content       String?
   assetLink     String?
   note          String?
+
+  @@index([channelId, scheduledAt])
+  @@index([deliverableId])
+}
+
+/// A staff-pinned event/channel/date placement. Locks are independent of
+/// generated Deliverables/Touches so a schedule rebuild can delete and recreate
+/// planned work while keeping intentional placements in place.
+model ScheduleLock {
+  id          String   @id @default(cuid())
+  requestId   String
+  request     Request  @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  channelId   String
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  scheduledAt DateTime
+  note        String?
+  createdById String?
+  createdBy   User?    @relation("scheduleLockCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@unique([requestId, channelId, scheduledAt])
+  @@index([channelId, scheduledAt])
+  @@index([requestId])
+  @@index([createdById])
 }
 
 model Setting {

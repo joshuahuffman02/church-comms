@@ -3,8 +3,19 @@ import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/authz";
 import { revalidatePath } from "next/cache";
 import { parseChannelUpdate } from "@/lib/channel-form";
+import { replanUpcomingPromotableRequests } from "@/lib/plan-service";
 
-const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot"]);
+const CHANNEL_TYPES = new Set(["windowed", "dated_instance", "one_shot", "single_weekday"]);
+
+function revalidateChannelSurfaces() {
+  revalidatePath("/settings/channels");
+  revalidatePath("/outputs");
+  revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
+  revalidatePath("/calendar");
+  revalidatePath("/guardrails");
+  revalidatePath("/assign");
+}
 
 export interface ChannelActionState {
   ok: boolean;
@@ -58,8 +69,8 @@ export async function updateChannel(
     return { ok: false, error: "Couldn’t save — that channel may no longer exist." };
   }
 
-  revalidatePath("/settings/channels");
-  revalidatePath("/outputs");
+  await replanUpcomingPromotableRequests();
+  revalidateChannelSurfaces();
   return { ok: true, savedAt: Date.now() };
 }
 
@@ -120,7 +131,8 @@ export async function createChannel(fd: FormData) {
     },
   });
 
-  revalidatePath("/settings/channels");
+  await replanUpcomingPromotableRequests();
+  revalidateChannelSurfaces();
 }
 
 /**
@@ -134,5 +146,5 @@ export async function deleteChannel(id: string) {
   await requireAdmin();
   await db.deliverable.deleteMany({ where: { channelId: id } });
   await db.channel.delete({ where: { id } });
-  revalidatePath("/settings/channels");
+  revalidateChannelSurfaces();
 }

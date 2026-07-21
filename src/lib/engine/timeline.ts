@@ -11,12 +11,16 @@ import type { ChannelConfig, EventInput, ComputedDeliverable, ComputedTouch } fr
  * on/before the event), productionDueAt is clamped to be >= today (so the import
  * never reads as "at risk" purely from being late), and status is never "skipped".
  *
- * When `catchUp` is falsy/absent the output is byte-for-byte the original
- * behavior — the default path below is untouched.
+ * When `catchUp` is falsy/absent the output follows the standard planner,
+ * except for rolling listing channels (currently PV Update Email) that should
+ * keep showing every remaining weekly instance once an event is inside its
+ * promotion window.
  */
 export interface ComputeOptions {
   catchUp?: boolean;
 }
+
+const ROLLING_WINDOWED_CHANNEL_KEYS = new Set(["email"]);
 
 export function computeDeliverable(
   ch: ChannelConfig, ev: EventInput, today: Date, opts?: ComputeOptions
@@ -24,7 +28,9 @@ export function computeDeliverable(
   const event = atMidnight(ev.eventStart);
   const scheduleEnd = ev.promotionEndsAt ? minDate(ev.promotionEndsAt, event) : event;
   const todayM = atMidnight(today);
-  const catchUp = opts?.catchUp === true;
+  const catchUp =
+    opts?.catchUp === true ||
+    (ch.type === "windowed" && ROLLING_WINDOWED_CHANNEL_KEYS.has(ch.key));
   let touches: ComputedTouch[] = [];
   let windowStart: Date | undefined;
   let windowEnd: Date | undefined;

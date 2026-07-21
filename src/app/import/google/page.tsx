@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isAdmin } from "@/lib/roles";
 import { activeExternalCalendarConfig } from "@/lib/calendar-settings";
 import { GOOGLE_ICAL_SOURCE } from "@/lib/google-intake";
+import { atMidnight } from "@/lib/engine/dates";
 import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form";
 import { GoogleImportList, type GoogleImportRow } from "@/components/google-import-list";
 import { GoogleCalendarCheckButton } from "@/components/google-calendar-check-button";
@@ -12,6 +14,16 @@ export const dynamic = "force-dynamic";
 
 const fmt = (d: Date) =>
   d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function includePastFromParams(params: SearchParams): boolean {
+  return firstParam(params.past) === "1";
+}
 
 function CalendarFeedCard({
   currentUrl,
@@ -51,7 +63,11 @@ function CalendarFeedCard({
   );
 }
 
-export default async function GoogleImportPage() {
+export default async function GoogleImportPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   const me = await getSessionUser();
   if (!me) redirect("/login");
   if (!isAdmin(me.roles)) {
@@ -66,6 +82,7 @@ export default async function GoogleImportPage() {
   }
 
   const calendar = await activeExternalCalendarConfig();
+  const includePast = includePastFromParams(await searchParams);
 
   return (
     <div className="max-w-3xl">
@@ -82,18 +99,28 @@ export default async function GoogleImportPage() {
           <div className="mb-5">
             <CalendarFeedCard currentUrl={calendar.sourceUrl} configured />
           </div>
-          <Preview />
+          <Preview includePast={includePast} />
         </>
       )}
     </div>
   );
 }
 
-async function Preview() {
-  const candidates = await db.calendarImportCandidate.findMany({
-    where: { status: "pending", source: GOOGLE_ICAL_SOURCE },
-    orderBy: [{ startsAt: "asc" }, { title: "asc" }],
-  });
+async function Preview({ includePast }: { includePast: boolean }) {
+  const today = atMidnight(new Date());
+  const [candidates, hiddenPastCount] = await Promise.all([
+    db.calendarImportCandidate.findMany({
+      where: {
+        status: "pending",
+        source: GOOGLE_ICAL_SOURCE,
+        ...(includePast ? {} : { startsAt: { gte: today } }),
+      },
+      orderBy: [{ startsAt: "asc" }, { title: "asc" }],
+    }),
+    db.calendarImportCandidate.count({
+      where: { status: "pending", source: GOOGLE_ICAL_SOURCE, startsAt: { lt: today } },
+    }),
+  ]);
   const rows: GoogleImportRow[] = candidates.map((candidate) => ({
     key: candidate.key,
     title: candidate.title,
@@ -122,21 +149,51 @@ async function Preview() {
   if (rows.length === 0) {
     return (
       <div>
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <GoogleCalendarCheckButton />
+          <PastToggle includePast={includePast} hiddenPastCount={hiddenPastCount} />
         </div>
         <div className="card-float p-5 text-muted text-sm">
-          No calendar events are waiting for review. Use Check calendar now to pull the latest feed into this inbox.
+          {includePast
+            ? "No calendar events are waiting for review. Use Check calendar now to pull the latest feed into this inbox."
+            : hiddenPastCount > 0
+              ? "No upcoming calendar events are waiting for review. Past events are hidden by default."
+              : "No upcoming calendar events are waiting for review. Use Check calendar now to pull the latest feed into this inbox."}
         </div>
       </div>
     );
   }
   return (
     <div>
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <GoogleCalendarCheckButton />
+        <PastToggle includePast={includePast} hiddenPastCount={hiddenPastCount} />
       </div>
       <GoogleImportList rows={rows} />
+    </div>
+  );
+}
+
+function PastToggle({
+  includePast,
+  hiddenPastCount,
+}: {
+  includePast: boolean;
+  hiddenPastCount: number;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <Link
+        href={includePast ? "/import/google" : "/import/google?past=1"}
+        className="font-semibold text-sky-700 hover:underline"
+      >
+        {includePast ? "Hide past events" : "Show past events"}
+      </Link>
+      {!includePast && hiddenPastCount > 0 && (
+        <span className="text-xs text-muted">
+          {hiddenPastCount} past {hiddenPastCount === 1 ? "event is" : "events are"} hidden
+        </span>
+      )}
     </div>
   );
 }

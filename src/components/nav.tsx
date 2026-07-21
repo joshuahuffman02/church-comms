@@ -25,9 +25,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Today",
     items: [
+      { href: "/run-sheet", label: "Sunday Checklist", icon: "🗒️" },
       { href: "/this-week", label: "This Week", icon: "🗓️" },
       { href: "/my-tasks", label: "My Tasks", icon: "✅" },
-      { href: "/run-sheet", label: "Sunday Checklist", icon: "🗒️" },
     ],
   },
   {
@@ -107,8 +107,12 @@ export async function Nav() {
         </span>
       )}
       {i.badge === "calendar" && calendarImportCount > 0 && (
-        <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
-          {calendarImportCount}
+        <span
+          aria-label={`${calendarImportCount} calendar events pending review`}
+          title={`${calendarImportCount} calendar events pending review`}
+          className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700"
+        >
+          {calendarImportCount > 99 ? "99+" : calendarImportCount}
         </span>
       )}
     </NavLink>

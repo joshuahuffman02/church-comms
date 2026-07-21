@@ -5,6 +5,7 @@ import { logRequestActivity } from "@/lib/activity";
 import { parseDateInput } from "@/lib/engine/dates";
 import { ministryIdsFromForm, ministryUpdateData } from "@/lib/ministries";
 import { replanRequest } from "@/lib/plan-service";
+import { isSchedulePresetKey } from "@/lib/schedule-presets";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -16,9 +17,11 @@ function revalidateEvent(id: string) {
   revalidatePath(`/requests/${id}`);
   revalidatePath("/requests");
   revalidatePath("/this-week");
+  revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/outputs");
   revalidatePath("/guardrails");
+  revalidatePath("/assign");
 }
 
 /** Read a form field as a trimmed string, or undefined when blank. */
@@ -40,7 +43,15 @@ export async function updateEvent(id: string, fd: FormData) {
 
   const existing = await db.request.findUnique({
     where: { id },
-    select: { title: true, eventStart: true, registrationClosesAt: true, tier: true },
+    select: {
+      title: true,
+      eventStart: true,
+      registrationClosesAt: true,
+      needsRegistration: true,
+      registrationUrl: true,
+      schedulePreset: true,
+      tier: true,
+    },
   });
   if (!existing) throw new Error("Request not found");
 
@@ -57,6 +68,9 @@ export async function updateEvent(id: string, fd: FormData) {
   const eventEnd = parseDateInput(String(fd.get("eventEnd") ?? ""));
   const registrationClosesAt = parseDateInput(String(fd.get("registrationClosesAt") ?? ""));
   const needsRegistration = fd.get("needsRegistration") != null;
+  const registrationUrl = optStr(fd, "registrationUrl") ?? null;
+  const schedulePresetRaw = String(fd.get("schedulePreset") ?? "").trim();
+  const schedulePreset = isSchedulePresetKey(schedulePresetRaw) ? schedulePresetRaw : null;
 
   // Replace the m-n ministry set with the submitted selection (all equal) and
   // keep the denormalized ministryId synced to the first, via the shared helper.
@@ -74,9 +88,10 @@ export async function updateEvent(id: string, fd: FormData) {
       eventEnd,
       location: optStr(fd, "location") ?? null,
       needsRegistration,
-      registrationUrl: optStr(fd, "registrationUrl") ?? null,
+      registrationUrl,
       cost: optStr(fd, "cost") ?? null,
       registrationClosesAt,
+      schedulePreset,
       nextStepText: optStr(fd, "nextStepText") ?? null,
       notes: optStr(fd, "notes") ?? null,
     },
@@ -88,7 +103,13 @@ export async function updateEvent(id: string, fd: FormData) {
     (existing.registrationClosesAt?.getTime() ?? null) !==
     (registrationClosesAt?.getTime() ?? null);
   const tierChanged = existing.tier !== tier;
-  if (dateChanged || registrationChanged || tierChanged) {
+  const titleChanged = existing.title !== title;
+  const registrationModeChanged =
+    existing.needsRegistration !== needsRegistration || existing.registrationUrl !== registrationUrl;
+  const presetChanged = existing.schedulePreset !== schedulePreset;
+  const scheduleChanged =
+    dateChanged || registrationChanged || tierChanged || titleChanged || registrationModeChanged || presetChanged;
+  if (scheduleChanged) {
     await replanRequest(id);
   }
 
@@ -96,7 +117,7 @@ export async function updateEvent(id: string, fd: FormData) {
     {
       requestId: id,
       action: "request_updated",
-      summary: dateChanged || registrationChanged || tierChanged
+      summary: scheduleChanged
         ? "Event details updated and schedule re-planned"
         : "Event details updated",
       metadata: {
@@ -105,6 +126,11 @@ export async function updateEvent(id: string, fd: FormData) {
         dateChanged,
         registrationChanged,
         tierChanged,
+        titleChanged,
+        registrationModeChanged,
+        presetChanged,
+        previousSchedulePreset: existing.schedulePreset,
+        schedulePreset,
         previousTier: existing.tier,
         tier,
       },
