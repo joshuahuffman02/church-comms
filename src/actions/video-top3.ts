@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireEditor } from "@/lib/authz";
 import { attachChannel } from "@/actions/quick-items";
 import { comingSunday } from "@/lib/week";
-import { atMidnight, addDays } from "@/lib/engine/dates";
+import { atMidnight, addDays, parseDateInput } from "@/lib/engine/dates";
 import {
   canProtectAnnouncementItem,
   loadAnnouncementVideoLineup,
@@ -173,7 +173,7 @@ export async function featureOnComingVideo(
 export async function addTop3Item(fd: FormData) {
   const user = await requireEditor();
   const sundayIso = String(fd.get("sunday") ?? "");
-  const sunday = atMidnight(new Date(sundayIso));
+  const sunday = parseDateInput(sundayIso) ?? atMidnight(new Date(sundayIso));
   if (Number.isNaN(sunday.getTime())) throw new Error("Bad sunday date");
 
   const requestId = ((fd.get("requestId") as string) || "").trim() || null;

@@ -15,8 +15,8 @@ export interface Guardrail {
   channelKey?: string;
   channelName?: string;
   requestIds?: string[];
-  /** The involved events, id + title, so links can be labelled by event name. */
-  requests?: { id: string; title: string }[];
+  /** The involved events and the exact scheduled appearance behind this check. */
+  requests?: { id: string; title: string; touchId?: string }[];
   /** Structured capacity data for decision-focused UIs. */
   itemCount?: number;
   capacity?: number;
@@ -32,6 +32,8 @@ export interface InstanceLoad {
   capacity: number;
   requestIds: string[];
   titles: string[];
+  /** Exact touch ids aligned with requestIds/titles for one-date removal controls. */
+  touchIds?: string[];
   /**
    * How many of this instance's slots are already CURATED (the announcement-
    * video Top-3 picks for this Sunday). When the picks fill the capacity, the
@@ -68,7 +70,11 @@ export function evaluateCapacity(loads: InstanceLoad[]): Guardrail[] {
       channelKey: load.channelKey,
       channelName: load.channelName,
       requestIds: load.requestIds,
-      requests: load.requestIds.map((id, i) => ({ id, title: load.titles[i] ?? "Event" })),
+      requests: load.requestIds.map((id, i) => ({
+        id,
+        title: load.titles[i] ?? "Event",
+        touchId: load.touchIds?.[i],
+      })),
       itemCount: over,
       capacity: load.capacity,
       pickedCount: load.pickedCount ?? 0,

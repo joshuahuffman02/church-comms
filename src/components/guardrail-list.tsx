@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GuardrailEventActions } from "@/components/guardrail-event-actions";
 import type { Guardrail } from "@/lib/guardrails";
 import { prettyChannel, prettyDate } from "@/lib/labels";
 
@@ -71,7 +72,8 @@ function resolution(guardrail: Guardrail): { href: string; label: string } | nul
 }
 
 function GuardrailRow({ guardrail }: { guardrail: Guardrail }) {
-  const events = guardrail.requests ?? (guardrail.requestIds ?? []).map((id) => ({ id, title: "View event" }));
+  const events: NonNullable<Guardrail["requests"]> = guardrail.requests
+    ?? (guardrail.requestIds ?? []).map((id) => ({ id, title: "View event", touchId: undefined }));
   const pickedIds = new Set(guardrail.pickedRequestIds ?? []);
   const action = resolution(guardrail);
   return (
@@ -99,20 +101,39 @@ function GuardrailRow({ guardrail }: { guardrail: Guardrail }) {
         {events.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted">Events in this check</p>
+            {guardrail.kind === "stage_cap" && guardrail.channelKey === "announcement_video" && (
+              <p className="mb-3 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-xs leading-relaxed text-slate-700">
+                <strong className="text-violet-900">Feature</strong> protects an event in the lineup. Leave it eligible for automatic fill, or choose <strong className="text-rose-800">Remove from this date</strong> if it should not appear that Sunday.
+              </p>
+            )}
             <div className="grid gap-2 sm:grid-cols-2">
               {events.map((event) => {
                 const picked = pickedIds.has(event.id);
+                const isAnnouncementVideo = guardrail.channelKey === "announcement_video";
+                const status = isAnnouncementVideo ? (picked ? "Featured" : "Eligible for auto-fill") : "Scheduled";
                 return (
-                  <Link
-                    key={event.id}
-                    href={`/requests/${event.id}`}
-                    className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-semibold text-ink transition hover:border-sky-300 hover:bg-white"
-                  >
-                    <span className="min-w-0">{event.title}</span>
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
-                      {picked ? "Featured" : "Review"}
-                    </span>
-                  </Link>
+                  <div key={event.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white/80">
+                    <Link
+                      href={`/requests/${event.id}`}
+                      className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-ink transition hover:bg-white"
+                    >
+                      <span className="min-w-0">{event.title}</span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
+                        {status}
+                      </span>
+                    </Link>
+                    {guardrail.whenISO && event.touchId && (guardrail.kind === "stage_cap" || guardrail.kind === "loop_cap") && (
+                      <GuardrailEventActions
+                        requestId={event.id}
+                        title={event.title}
+                        channelName={channelName(guardrail)}
+                        whenISO={guardrail.whenISO}
+                        touchId={event.touchId}
+                        featured={picked}
+                        canFeature={guardrail.kind === "stage_cap" && isAnnouncementVideo}
+                      />
+                    )}
+                  </div>
                 );
               })}
             </div>
