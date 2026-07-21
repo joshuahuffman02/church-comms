@@ -6,25 +6,36 @@ import { removeTouch } from "@/actions/events";
 export function TouchRemoveButton({
   id,
   channelName,
+  eventTitle,
+  scheduledAt,
 }: {
   id: string;
   channelName: string;
+  eventTitle: string;
+  scheduledAt: Date;
 }) {
   const [pending, startTransition] = useTransition();
+  const dateLabel = scheduledAt.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const controlLabel = `Remove ${eventTitle} from ${channelName} on ${dateLabel}`;
 
   return (
     <button
+      type="button"
       disabled={pending}
       onClick={() => {
-        if (window.confirm(`Remove this from ${channelName} for this week?`)) {
+        if (window.confirm(`${controlLabel}?`)) {
           startTransition(() => removeTouch(id));
         }
       }}
-      className="rounded-full border border-rose-200 px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50 transition disabled:opacity-40"
-      title={`Remove from ${channelName} this week`}
-      aria-label={`Remove from ${channelName} this week`}
+      className="min-h-9 rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-40"
+      title={controlLabel}
+      aria-label={controlLabel}
     >
-      ✕
+      {pending ? "Removing…" : "Remove"}
     </button>
   );
 }

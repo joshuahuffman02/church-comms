@@ -481,20 +481,35 @@ export async function removeTouch(touchId: string) {
     select: {
       channelId: true,
       scheduledAt: true,
-      deliverable: { select: { requestId: true, channel: { select: { name: true } } } },
+      deliverable: {
+        select: {
+          requestId: true,
+          channel: { select: { key: true, name: true } },
+        },
+      },
     },
   });
   if (!existing) throw new Error("Touch not found");
-  const [removedLocks] = await db.$transaction([
-    db.scheduleLock.deleteMany({
+  const scheduledAt = atMidnight(existing.scheduledAt);
+  const { removedLocks, removedPicks } = await db.$transaction(async (tx) => {
+    const removedLocks = await tx.scheduleLock.deleteMany({
       where: {
         requestId: existing.deliverable.requestId,
         channelId: existing.channelId,
-        scheduledAt: atMidnight(existing.scheduledAt),
+        scheduledAt,
       },
-    }),
-    db.touch.delete({ where: { id: touchId } }),
-  ]);
+    });
+    const removedPicks = existing.deliverable.channel.key === "announcement_video"
+      ? await tx.videoTop3Item.deleteMany({
+          where: {
+            requestId: existing.deliverable.requestId,
+            sunday: scheduledAt,
+          },
+        })
+      : { count: 0 };
+    await tx.touch.delete({ where: { id: touchId } });
+    return { removedLocks, removedPicks };
+  });
   await logRequestActivity(
     {
       requestId: existing.deliverable.requestId,
@@ -505,10 +520,12 @@ export async function removeTouch(touchId: string) {
         channelName: existing.deliverable.channel.name,
         scheduledAt: existing.scheduledAt.toISOString(),
         removedLocks: removedLocks.count,
+        removedFeaturedPicks: removedPicks.count,
       },
     },
     user,
   );
   revalidatePath(`/requests/${existing.deliverable.requestId}`);
+  revalidatePath(`/outputs/${existing.deliverable.channel.key}`);
   revalidateSchedules();
 }
