@@ -103,7 +103,7 @@ function GuardrailRow({ guardrail }: { guardrail: Guardrail }) {
             <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted">Events in this check</p>
             {guardrail.kind === "stage_cap" && guardrail.channelKey === "announcement_video" && (
               <p className="mb-3 rounded-xl border border-violet-100 bg-violet-50/70 px-3 py-2 text-xs leading-relaxed text-slate-700">
-                <strong className="text-violet-900">Feature</strong> protects an event in the lineup. Leave it eligible for automatic fill, or choose <strong className="text-rose-800">Remove from this date</strong> if it should not appear that Sunday.
+                Use the <strong className="text-violet-900">violet star</strong> to feature and protect an event. Leave it eligible for automatic fill, or use the <strong className="text-rose-800">red remove button</strong> if it should not appear that Sunday.
               </p>
             )}
             <div className="grid gap-2 sm:grid-cols-2">
@@ -112,13 +112,13 @@ function GuardrailRow({ guardrail }: { guardrail: Guardrail }) {
                 const isAnnouncementVideo = guardrail.channelKey === "announcement_video";
                 const status = isAnnouncementVideo ? (picked ? "Featured" : "Eligible for auto-fill") : "Scheduled";
                 return (
-                  <div key={event.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white/80">
+                  <div key={event.id} className="relative overflow-hidden rounded-xl border border-slate-200 bg-white/80">
                     <Link
                       href={`/requests/${event.id}`}
-                      className="flex min-h-11 items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-ink transition hover:bg-white"
+                      className="block min-h-16 px-3 py-3 pr-20 text-sm font-semibold text-ink transition hover:bg-white"
                     >
-                      <span className="min-w-0">{event.title}</span>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
+                      <span className="block min-w-0 leading-snug">{event.title}</span>
+                      <span className={`mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
                         {status}
                       </span>
                     </Link>
