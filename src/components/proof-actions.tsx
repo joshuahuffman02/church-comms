@@ -1,42 +1,58 @@
 "use client";
-import { useTransition } from "react";
+
+import { useOptimistic, useState, useTransition } from "react";
 import { sendToProof, approveProof } from "@/actions/tasks";
 
-/**
- * Lightweight proof sign-off affordance. Before proof: "Send to proof". While
- * in proof: "Approve". Once ready/scheduled/published it renders nothing —
- * the sign-off is done. Reuses the existing Deliverable status, so this is just
- * a friendlier two-button face on `sendToProof` / `approveProof`.
- */
+/** A clear proof handoff with optimistic state and visible save failures. */
 export function ProofActions({ id, status }: { id: string; status: string }) {
+  const [optimisticStatus, setOptimisticStatus] = useOptimistic(status);
+  const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  if (status === "proof") {
+  function run(nextStatus: string, action: (deliverableId: string) => Promise<void>) {
+    setError(null);
+    start(async () => {
+      setOptimisticStatus(nextStatus);
+      try {
+        await action(id);
+      } catch {
+        setError("Not saved—try again");
+      }
+    });
+  }
+
+  if (pending) {
     return (
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => start(() => approveProof(id))}
-        className="rounded-full bg-emerald-500 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-600 transition disabled:opacity-50"
-        title="Approve this proof → Ready"
-      >
-        ✓ Approve proof
-      </button>
+      <span className="inline-flex min-h-11 items-center rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-muted">
+        Saving…
+      </span>
     );
   }
 
-  // Already signed off / published — nothing to do.
-  if (["ready", "scheduled", "published", "skipped"].includes(status)) return null;
+  if (["ready", "scheduled", "published", "skipped"].includes(optimisticStatus)) return null;
 
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() => start(() => sendToProof(id))}
-      className="rounded-full border border-amber-300 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition disabled:opacity-50"
-      title="Send this to proof for sign-off"
-    >
-      → Send to proof
-    </button>
+    <span className="inline-flex flex-col items-start">
+      {optimisticStatus === "proof" ? (
+        <button
+          type="button"
+          onClick={() => run("ready", approveProof)}
+          className="inline-flex min-h-11 items-center rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
+          title="Approve this proof and mark it ready"
+        >
+          ✓ Approve proof
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => run("proof", sendToProof)}
+          className="inline-flex min-h-11 items-center rounded-full border border-amber-300 px-4 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-50"
+          title="Send this piece to proof for sign-off"
+        >
+          Send to proof →
+        </button>
+      )}
+      {error && <span role="alert" className="mt-1 text-[11px] font-bold text-rose-700">{error}</span>}
+    </span>
   );
 }
