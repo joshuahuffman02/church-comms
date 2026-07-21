@@ -1,91 +1,165 @@
 import Link from "next/link";
 import type { Guardrail } from "@/lib/guardrails";
+import { prettyChannel, prettyDate } from "@/lib/labels";
 
 const KIND_LABEL: Record<Guardrail["kind"], string> = {
-  stage_cap: "Top-3 video / stage — pick your three",
-  loop_cap: "Loop over capacity",
-  promo_density: "Busy weeks (FYI)",
-  reach_tier: "Reach vs tier",
+  stage_cap: "Announcement and stage lineups",
+  loop_cap: "Sunday Loop capacity",
+  promo_density: "Busy channel weeks",
+  reach_tier: "Audience and tier",
 };
 
-// Severity → soft theme colors. block = red-ish (decision), warn = amber-ish,
-// info = muted slate (informational, not an alarm).
 function severityClasses(severity: Guardrail["severity"]): string {
-  if (severity === "block") return "bg-rose-50 border border-rose-200";
-  if (severity === "warn") return "bg-amber-50 border border-amber-200";
-  return "bg-slate-50 border border-slate-200";
+  if (severity === "block") return "border-rose-200 bg-rose-50/55";
+  if (severity === "warn") return "border-amber-200 bg-amber-50/55";
+  return "border-slate-200 bg-slate-50/65";
 }
 
-function severityChip(severity: Guardrail["severity"]) {
-  if (severity === "block")
-    return (
-      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-700">
-        Needs a decision
-      </span>
-    );
-  if (severity === "warn")
-    return (
-      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-        Heads up
-      </span>
-    );
+function SeverityChip({ severity }: { severity: Guardrail["severity"] }) {
+  if (severity === "block") {
+    return <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Needs a decision</span>;
+  }
+  if (severity === "warn") {
+    return <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Review recommended</span>;
+  }
+  return <span className="rounded-full bg-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700">For awareness</span>;
+}
+
+function longDate(iso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!match) return iso;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function channelName(guardrail: Guardrail): string {
+  return guardrail.channelName ?? (guardrail.channelKey ? prettyChannel(guardrail.channelKey) : "This schedule");
+}
+
+function decisionTitle(guardrail: Guardrail): string {
+  const channel = channelName(guardrail);
+  if (guardrail.kind === "reach_tier") return `${guardrail.requests?.[0]?.title ?? "This event"} may be classified too broadly`;
+  if (guardrail.kind === "promo_density") return `${channel} has a busier-than-usual week`;
+  if (guardrail.whenISO) return `${channel} needs a final lineup for ${longDate(guardrail.whenISO)}`;
+  return `${channel} is over capacity`;
+}
+
+function decisionCopy(guardrail: Guardrail): string {
+  if (guardrail.itemCount != null && guardrail.capacity != null) {
+    const extra = Math.max(0, guardrail.itemCount - guardrail.capacity);
+    return `${guardrail.itemCount} events want this lineup, but only ${guardrail.capacity} fit. Choose the ${guardrail.capacity} to keep${extra > 0 ? ` and hold ${extra}` : ""}.`;
+  }
+  return guardrail.message;
+}
+
+function resolution(guardrail: Guardrail): { href: string; label: string } | null {
+  if (guardrail.kind === "reach_tier" && guardrail.requestIds?.[0]) {
+    return { href: `/requests/${guardrail.requestIds[0]}/edit`, label: "Review audience tier" };
+  }
+  if (guardrail.channelKey) {
+    const focused = guardrail.whenISO ? `?week=${guardrail.whenISO}#week-${guardrail.whenISO}` : "";
+    return {
+      href: `/outputs/${guardrail.channelKey}${focused}`,
+      label: guardrail.kind === "promo_density" ? "View channel" : "Review this lineup",
+    };
+  }
+  return null;
+}
+
+function GuardrailRow({ guardrail }: { guardrail: Guardrail }) {
+  const events = guardrail.requests ?? (guardrail.requestIds ?? []).map((id) => ({ id, title: "View event" }));
+  const pickedIds = new Set(guardrail.pickedRequestIds ?? []);
+  const action = resolution(guardrail);
   return (
-    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-600">
-      FYI
-    </span>
+    <article className={`card-float overflow-hidden border ${severityClasses(guardrail.severity)}`}>
+      <div className="border-b border-slate-200/70 px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <SeverityChip severity={guardrail.severity} />
+          {guardrail.channelKey && (
+            <span className="rounded-full bg-white/75 px-2.5 py-1 text-xs font-bold text-muted">
+              {channelName(guardrail)}
+            </span>
+          )}
+          {guardrail.whenISO && <span className="text-xs font-semibold text-muted">{prettyDate(guardrail.whenISO)}</span>}
+          {guardrail.capacity != null && (
+            <span className="ml-auto rounded-full bg-white/75 px-2.5 py-1 text-xs font-bold text-ink">
+              {guardrail.pickedCount ?? 0}/{guardrail.capacity} featured
+            </span>
+          )}
+        </div>
+        <h3 className="mt-3 text-lg font-extrabold leading-snug text-ink">{decisionTitle(guardrail)}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-slate-700">{decisionCopy(guardrail)}</p>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        {events.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-muted">Events in this check</p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {events.map((event) => {
+                const picked = pickedIds.has(event.id);
+                return (
+                  <Link
+                    key={event.id}
+                    href={`/requests/${event.id}`}
+                    className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-sm font-semibold text-ink transition hover:border-sky-300 hover:bg-white"
+                  >
+                    <span className="min-w-0">{event.title}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ${picked ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
+                      {picked ? "Featured" : "Review"}
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {action && (
+          <div className="mt-4 flex flex-col gap-2 border-t border-slate-200/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs leading-relaxed text-muted">
+              Make the decision on the shared channel lineup so This Week, Sunday Checklist, and exports all stay in sync.
+            </p>
+            <Link
+              href={action.href}
+              className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full bg-sky-700 px-5 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
+            >
+              {action.label}
+            </Link>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }
 
-/**
- * Reusable presentational list of guardrails. Used by both the global
- * `/guardrails` page and the per-request "Heads-up" panel. Each guardrail is a
- * `.card-float` row colored by severity, showing its message, date, channel and
- * links to the involved requests. If `grouped`, splits by kind with headers.
- */
-export function GuardrailList({
-  guardrails,
-  grouped = false,
-}: {
-  guardrails: Guardrail[];
-  grouped?: boolean;
-}) {
+export function GuardrailList({ guardrails, grouped = false }: { guardrails: Guardrail[]; grouped?: boolean }) {
   if (guardrails.length === 0) {
-    return <div className="text-muted text-sm">All clear ✨</div>;
+    return <div className="rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/60 p-5 text-sm font-semibold text-emerald-800">No decisions are waiting here.</div>;
   }
-
   if (!grouped) {
-    return (
-      <div className="grid gap-2">
-        {guardrails.map((g, i) => (
-          <GuardrailRow key={i} g={g} />
-        ))}
-      </div>
-    );
+    return <div className="grid gap-3">{guardrails.map((guardrail, index) => <GuardrailRow key={`${guardrail.kind}:${guardrail.whenISO ?? index}`} guardrail={guardrail} />)}</div>;
   }
 
-  // Group by kind, preserving first-seen order.
   const order: Guardrail["kind"][] = [];
   const byKind = new Map<Guardrail["kind"], Guardrail[]>();
-  for (const g of guardrails) {
-    if (!byKind.has(g.kind)) {
-      byKind.set(g.kind, []);
-      order.push(g.kind);
-    }
-    byKind.get(g.kind)!.push(g);
+  for (const guardrail of guardrails) {
+    if (!byKind.has(guardrail.kind)) order.push(guardrail.kind);
+    byKind.set(guardrail.kind, [...(byKind.get(guardrail.kind) ?? []), guardrail]);
   }
-
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-6">
       {order.map((kind) => (
-        <section key={kind}>
-          <h2 className="font-bold mb-2">
-            {KIND_LABEL[kind]}{" "}
-            <span className="text-muted font-normal">({byKind.get(kind)!.length})</span>
+        <section key={kind} aria-labelledby={`guardrail-${kind}`}>
+          <h2 id={`guardrail-${kind}`} className="mb-2 font-extrabold text-ink">
+            {KIND_LABEL[kind]} <span className="font-semibold text-muted">· {byKind.get(kind)?.length ?? 0}</span>
           </h2>
-          <div className="grid gap-2">
-            {byKind.get(kind)!.map((g, i) => (
-              <GuardrailRow key={i} g={g} />
-            ))}
+          <div className="grid gap-3">
+            {byKind.get(kind)?.map((guardrail, index) => <GuardrailRow key={`${guardrail.whenISO ?? index}`} guardrail={guardrail} />)}
           </div>
         </section>
       ))}
@@ -93,53 +167,36 @@ export function GuardrailList({
   );
 }
 
-/** "announcement_video" -> "Announcement Video" for friendly display. */
-function prettyChannel(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-/** "2026-06-07" -> "Sun, Jun 7" (parsed as a local date, no UTC shift). */
-function prettyDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-}
-
-function GuardrailRow({ g }: { g: Guardrail }) {
-  // Prefer the labelled requests; fall back to bare ids so older shapes still link.
-  const events = g.requests ?? (g.requestIds ?? []).map((id) => ({ id, title: "View event" }));
+export function GuardrailInfoSummary({ guardrails }: { guardrails: Guardrail[] }) {
+  const grouped = new Map<string, Guardrail[]>();
+  for (const guardrail of guardrails) {
+    const channel = guardrail.channelKey ?? "other";
+    grouped.set(channel, [...(grouped.get(channel) ?? []), guardrail]);
+  }
   return (
-    <div className={`card-float p-4 ${severityClasses(g.severity)}`}>
-      <div className="flex items-center gap-2 flex-wrap">
-        {severityChip(g.severity)}
-        {g.channelKey && (
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-muted">
-            {prettyChannel(g.channelKey)}
-          </span>
-        )}
-        {g.whenISO && <span className="text-xs text-muted">{prettyDate(g.whenISO)}</span>}
-      </div>
-      <p className="mt-2 text-sm">{g.message}</p>
-      {events.length > 0 && (
-        <div className="mt-2">
-          <p className="text-xs font-semibold text-muted mb-1">The events involved:</p>
-          <div className="flex flex-wrap gap-2">
-            {events.map((e) => (
-              <Link
-                key={e.id}
-                href={`/requests/${e.id}`}
-                className="rounded-full bg-white/70 border px-3 py-1 text-xs font-semibold hover:bg-white transition"
-              >
-                {e.title} →
+    <div className="grid gap-3 sm:grid-cols-2">
+      {[...grouped.entries()].map(([channelKey, rows]) => (
+        <div key={channelKey} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-extrabold text-ink">{channelKey === "other" ? "Other checks" : channelName(rows[0])}</h3>
+              <p className="mt-0.5 text-xs text-muted">{rows.length} informational {rows.length === 1 ? "check" : "checks"}</p>
+            </div>
+            {channelKey !== "other" && (
+              <Link href={`/outputs/${channelKey}`} className="inline-flex min-h-11 items-center rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 hover:bg-sky-bg">
+                View channel
               </Link>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {rows.map((row, index) => (
+              <span key={`${row.whenISO ?? index}`} className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-muted">
+                {row.whenISO ? prettyDate(row.whenISO) : "No date"}
+              </span>
             ))}
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

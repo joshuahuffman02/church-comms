@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { atMidnight } from "@/lib/engine/dates";
+import { addDays, atMidnight } from "@/lib/engine/dates";
 import { weekRange } from "@/lib/week";
 import {
   evaluateCapacity,
@@ -44,11 +44,30 @@ function dayFromISO(iso: string): Date {
 
 type LoadedRequest = Awaited<ReturnType<typeof loadActiveRequests>>[number];
 
-function loadActiveRequests() {
+function loadActiveRequests(cutoff: Date, horizonEnd: Date) {
   return db.request.findMany({
     where: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
-    include: {
-      deliverables: { include: { channel: true, touches: true } },
+    select: {
+      id: true,
+      title: true,
+      tier: true,
+      audienceReachPct: true,
+      eventStart: true,
+      deliverables: {
+        where: { NOT: { status: "skipped" } },
+        select: {
+          channel: {
+            select: { key: true, name: true, type: true, capacity: true, frequencyCap: true },
+          },
+          touches: {
+            where: {
+              NOT: { status: "skipped" },
+              scheduledAt: { gte: cutoff, lt: horizonEnd },
+            },
+            select: { scheduledAt: true },
+          },
+        },
+      },
     },
   });
 }
@@ -60,11 +79,20 @@ function loadActiveRequests() {
  * back to events and `getGuardrailsForRequest` can filter.
  */
 export async function getGuardrails(today: Date): Promise<Guardrail[]> {
+  const day = atMidnight(today);
+  const cutoff = atMidnight(weekRange(day).start);
+  const horizonEnd = addDays(cutoff, 16 * 7);
   const [requests, setting, campaigns, top3] = await Promise.all([
-    loadActiveRequests(),
+    loadActiveRequests(cutoff, horizonEnd),
     db.setting.findUnique({ where: { id: 1 } }),
-    db.campaign.findMany(),
-    db.videoTop3Item.findMany({ select: { sunday: true } }),
+    db.campaign.findMany({
+      where: { suspendsGuardrails: true, startsAt: { lte: day }, endsAt: { gte: day } },
+      select: { startsAt: true, endsAt: true, suspendsGuardrails: true },
+    }),
+    db.videoTop3Item.findMany({
+      where: { sunday: { gte: cutoff, lt: horizonEnd } },
+      select: { sunday: true, requestId: true },
+    }),
   ]);
 
   const thresholdPct = setting?.reachThresholdPct ?? DEFAULT_REACH_THRESHOLD;
@@ -72,32 +100,36 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
   // How many announcement-video slots are already PICKED per Sunday — so a
   // fully-picked over-cap downgrades from "needs a decision" to informational.
   const pickedBySunday = new Map<string, number>();
+  const pickedRequestIdsBySunday = new Map<string, string[]>();
   for (const p of top3) {
     const k = isoDay(p.sunday);
     pickedBySunday.set(k, (pickedBySunday.get(k) ?? 0) + 1);
+    if (p.requestId) {
+      pickedRequestIdsBySunday.set(k, [...(pickedRequestIdsBySunday.get(k) ?? []), p.requestId]);
+    }
   }
 
   // Only flag decisions you can still act on: ignore touches before THIS week's
   // start, so past Sundays (already aired) don't linger as "needs a decision".
-  const cutoff = atMidnight(weekRange(today).start).getTime();
+  const cutoffMs = cutoff.getTime();
 
   // --- InstanceLoad[]: dated_instance touches grouped by (channelKey, instanceDate). ---
   // Key by channelKey + the touch's calendar day; track distinct requestIds.
   const instanceMap = new Map<
     string,
-    { channelKey: string; whenISO: string; capacity: number; requestIds: Set<string>; titles: string[] }
+    { channelKey: string; channelName: string; whenISO: string; capacity: number; requestIds: Set<string>; titles: string[] }
   >();
   // --- ChannelWeekLoad[]: windowed/one_shot touches grouped by (channelKey, ISO-week-start). ---
   const weekMap = new Map<
     string,
-    { channelKey: string; weekISO: string; cap: number; touchCount: number }
+    { channelKey: string; channelName: string; weekISO: string; cap: number; touchCount: number }
   >();
 
   for (const req of requests) {
     for (const del of req.deliverables) {
       const ch = del.channel;
       for (const t of del.touches) {
-        if (atMidnight(t.scheduledAt).getTime() < cutoff) continue; // skip the past
+        if (atMidnight(t.scheduledAt).getTime() < cutoffMs) continue; // skip the past
         if (ch.type === "dated_instance") {
           const whenISO = isoDay(t.scheduledAt);
           const key = `${ch.key}|${whenISO}`;
@@ -105,6 +137,7 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
           if (!bucket) {
             bucket = {
               channelKey: ch.key,
+              channelName: ch.name,
               whenISO,
               capacity: ch.capacity ?? DEFAULT_INSTANCE_CAPACITY,
               requestIds: new Set(),
@@ -124,6 +157,7 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
           if (!bucket) {
             bucket = {
               channelKey: ch.key,
+              channelName: ch.name,
               weekISO,
               cap: ch.frequencyCap ?? DEFAULT_WEEK_CAP,
               touchCount: 0,
@@ -138,26 +172,31 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
 
   const instanceLoads: InstanceLoad[] = [...instanceMap.values()].map((b) => ({
     channelKey: b.channelKey,
+    channelName: b.channelName,
     whenISO: b.whenISO,
     capacity: b.capacity,
     requestIds: [...b.requestIds],
     titles: b.titles,
     pickedCount: b.channelKey === "announcement_video" ? pickedBySunday.get(b.whenISO) ?? 0 : undefined,
+    pickedRequestIds: b.channelKey === "announcement_video" ? pickedRequestIdsBySunday.get(b.whenISO) ?? [] : undefined,
   }));
   const weekLoads: ChannelWeekLoad[] = [...weekMap.values()].map((b) => ({
     channelKey: b.channelKey,
+    channelName: b.channelName,
     weekISO: b.weekISO,
     touchCount: b.touchCount,
     cap: b.cap,
   }));
 
   // --- ReachCheck[] from the requests themselves. ---
-  const reachChecks: ReachCheck[] = requests.map((r: LoadedRequest) => ({
-    requestId: r.id,
-    title: r.title,
-    tier: r.tier,
-    reachPct: r.audienceReachPct,
-  }));
+  const reachChecks: ReachCheck[] = requests
+    .filter((request: LoadedRequest) => request.eventStart >= day && request.eventStart < horizonEnd)
+    .map((r: LoadedRequest) => ({
+      requestId: r.id,
+      title: r.title,
+      tier: r.tier,
+      reachPct: r.audienceReachPct,
+    }));
 
   const guardrails: Guardrail[] = [
     ...evaluateCapacity(instanceLoads),

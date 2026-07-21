@@ -466,8 +466,15 @@ function GenericWeekBody({
   );
 }
 
-export default async function OutputPage({ params }: { params: Promise<{ key: string }> }) {
-  const { key } = await params;
+export default async function OutputPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ key: string }>;
+  searchParams: Promise<{ week?: string }>;
+}) {
+  const [{ key }, query] = await Promise.all([params, searchParams]);
+  const focusedWeek = /^\d{4}-\d{2}-\d{2}$/.test(query.week ?? "") ? query.week! : null;
   const [channel, user] = await Promise.all([
     db.channel.findUnique({ where: { key } }),
     getSessionUser(),
@@ -612,7 +619,12 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
         )}
       </header>
 
-      <section className="card-float mb-5 p-5" style={{ borderLeft: `5px solid ${channel.color}` }} aria-labelledby="current-lineup-heading">
+      <section
+        id={`week-${localDayKey(announcementVideo ? currentSunday : currentWeek.end)}`}
+        className="card-float mb-5 scroll-mt-4 p-5"
+        style={{ borderLeft: `5px solid ${channel.color}` }}
+        aria-labelledby="current-lineup-heading"
+      >
         <div className="mb-3 flex flex-col gap-2 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-extrabold uppercase tracking-wide text-muted">Current</p>
@@ -661,7 +673,12 @@ export default async function OutputPage({ params }: { params: Promise<{ key: st
             {upcomingPanels.map((group, index) => {
               const lineup = upcomingVideoLineups.get(localDayKey(group.sunday));
               return (
-                <details key={group.sunday.getTime()} open={index < 2} className="card-float group p-0">
+                <details
+                  key={group.sunday.getTime()}
+                  id={`week-${localDayKey(group.sunday)}`}
+                  open={index < 2 || focusedWeek === localDayKey(group.sunday)}
+                  className="card-float group scroll-mt-4 p-0"
+                >
                   <summary className="flex cursor-pointer list-none flex-col gap-2 px-5 py-4 sm:flex-row sm:items-center sm:justify-between [&::-webkit-details-marker]:hidden">
                     <div className="flex min-w-0 items-center gap-3">
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-100 text-sm font-bold text-muted transition group-open:rotate-90">›</span>
