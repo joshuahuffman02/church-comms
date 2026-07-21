@@ -3,6 +3,7 @@ import {
   effectiveOwnerId,
   bucketForTask,
   focusMyTasks,
+  hasCurrentPlacement,
   type MyTask,
   type MyTasksResult,
 } from "../src/lib/tasks";
@@ -106,5 +107,28 @@ describe("focusMyTasks", () => {
     expect(result.nearTerm).toHaveLength(1);
     expect(result.later).toHaveLength(2);
     expect(result.actionTotal).toBe(2);
+  });
+});
+
+describe("hasCurrentPlacement", () => {
+  const today = atMidnight(new Date("2026-07-21"));
+
+  it("drops a channel after its final advertising placement has passed", () => {
+    expect(hasCurrentPlacement([
+      { scheduledAt: addDays(today, -14) },
+      { scheduledAt: addDays(today, -1) },
+    ], today)).toBe(false);
+  });
+
+  it("keeps multi-week work while any placement is today or later", () => {
+    expect(hasCurrentPlacement([
+      { scheduledAt: addDays(today, -7) },
+      { scheduledAt: today },
+      { scheduledAt: addDays(today, 7) },
+    ], today)).toBe(true);
+  });
+
+  it("keeps undated assignments visible", () => {
+    expect(hasCurrentPlacement([], today)).toBe(true);
   });
 });

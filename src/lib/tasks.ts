@@ -65,6 +65,19 @@ export type MyTasksResult = {
 const DONE_STATUSES = ["ready", "scheduled", "published", "skipped"];
 const DONE = new Set(DONE_STATUSES);
 
+type DatedPlacement = { scheduledAt: Date };
+
+/**
+ * A dated channel stops being actionable after its final placement has passed.
+ * Deliverables without touches remain visible because they may be legitimate
+ * unscheduled work that still needs attention.
+ */
+export function hasCurrentPlacement(touches: DatedPlacement[], today: Date): boolean {
+  if (touches.length === 0) return true;
+  const day = atMidnight(today);
+  return touches.some((touch) => atMidnight(touch.scheduledAt) >= day);
+}
+
 export type MyTasksFocus = {
   recentOverdue: MyTask[];
   oldBacklog: MyTask[];
@@ -154,6 +167,7 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
     include: {
       channel: { select: { name: true, color: true } },
       request: { select: { id: true, title: true, ownerId: true, eventStart: true } },
+      touches: { select: { scheduledAt: true } },
     },
     orderBy: { productionDueAt: "asc" },
   });
@@ -170,6 +184,10 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
     // Effective-owner guard: a deliverable explicitly owned by someone else
     // must not appear just because the request is mine.
     if (effectiveOwnerId(d, d.request) !== userId) continue;
+    // A one-shot or multi-week placement is no longer useful here once every
+    // scheduled appearance is in the past. Do not turn expired advertising
+    // opportunities into permanent overdue production tasks.
+    if (!hasCurrentPlacement(d.touches, today)) continue;
 
     const bucket = bucketForTask(d, today);
     if (!bucket) continue;
