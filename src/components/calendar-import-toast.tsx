@@ -13,5 +13,10 @@ export async function CalendarImportToast() {
   });
   if (pendingCount === 0) return null;
 
+  // A very large queue is an inbox/backlog state, not a useful transient toast.
+  // The persistent, capped badge in navigation still points admins to it without
+  // covering working content on every page and at high browser zoom.
+  if (pendingCount > 100) return null;
+
   return <CalendarImportToastClient pendingCount={pendingCount} />;
 }

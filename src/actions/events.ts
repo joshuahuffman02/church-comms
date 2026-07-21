@@ -118,6 +118,43 @@ export async function removeDeliverable(deliverableId: string) {
 }
 
 /**
+ * Remove an event from a channel completely. Unlike removing one deliverable,
+ * this clears every dated appearance, every lock, and (for Announcement Video)
+ * every featured Top-3 pick for the event.
+ */
+export async function removeChannelFromRequest(requestId: string, channelId: string) {
+  const user = await requireEditor();
+  const [request, channel] = await Promise.all([
+    db.request.findUnique({ where: { id: requestId }, select: { title: true } }),
+    db.channel.findUnique({ where: { id: channelId }, select: { key: true, name: true } }),
+  ]);
+  if (!request) throw new Error("Event not found");
+  if (!channel) throw new Error("Channel not found");
+
+  const removed = await db.$transaction(async (tx) => {
+    const locks = await tx.scheduleLock.deleteMany({ where: { requestId, channelId } });
+    const deliverables = await tx.deliverable.deleteMany({ where: { requestId, channelId } });
+    const picks = channel.key === "announcement_video"
+      ? await tx.videoTop3Item.deleteMany({ where: { requestId } })
+      : { count: 0 };
+    return { locks: locks.count, deliverables: deliverables.count, picks: picks.count };
+  });
+
+  await logRequestActivity(
+    {
+      requestId,
+      action: "channel_removed",
+      summary: `Removed ${channel.name} from ${request.title}`,
+      metadata: { channelId, channelKey: channel.key, ...removed },
+    },
+    user,
+  );
+  revalidatePath(`/requests/${requestId}`);
+  revalidateSchedules();
+  return removed;
+}
+
+/**
  * Remove a single touch — pulls one appearance (one output, one week).
  */
 export async function removeTouch(touchId: string) {

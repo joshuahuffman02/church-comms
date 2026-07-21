@@ -4,7 +4,10 @@ import { requireEditor } from "@/lib/authz";
 import { attachChannel } from "@/actions/quick-items";
 import { comingSunday } from "@/lib/week";
 import { atMidnight, addDays } from "@/lib/engine/dates";
-import { loadAnnouncementVideoLineup } from "@/lib/announcement-video";
+import {
+  canProtectAnnouncementItem,
+  loadAnnouncementVideoLineup,
+} from "@/lib/announcement-video";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { effectiveEventCap } from "@/lib/social-curation";
 import { revalidatePath } from "next/cache";
@@ -27,6 +30,7 @@ async function ensureVideoPlacement(
   requestId: string,
   sunday: Date,
   createdById?: string | null,
+  replacingRequestId?: string | null,
 ): Promise<void> {
   const [request, channel] = await Promise.all([
     db.request.findUnique({
@@ -52,7 +56,11 @@ async function ensureVideoPlacement(
   const cap = effectiveEventCap(channel);
   if (!existingLock && cap) {
     const lockedCount = await db.scheduleLock.count({
-      where: { channelId: channel.id, scheduledAt: sunday },
+      where: {
+        channelId: channel.id,
+        scheduledAt: sunday,
+        ...(replacingRequestId ? { requestId: { not: replacingRequestId } } : {}),
+      },
     });
     if (lockedCount >= cap) {
       throw new Error(
@@ -120,26 +128,40 @@ function revalidateTop3Surfaces(): void {
  * slide or the pick. Use this for one-click "add to the video" from the event /
  * output pages.
  */
-export async function featureOnComingVideo(requestId: string): Promise<void> {
+export async function featureOnComingVideo(
+  requestId: string,
+): Promise<{ ok: true; message: string } | { ok: false; message: string }> {
   const user = await requireEditor();
   const sunday = atMidnight(comingSunday(new Date()));
-  await ensureVideoPlacement(requestId, sunday, user.id);
+  const lineup = await loadAnnouncementVideoLineup(sunday);
+  if (!canProtectAnnouncementItem(lineup, requestId)) {
+    return { ok: false, message: "All three video slots are protected. Replace one on This Week first." };
+  }
+  try {
+    await ensureVideoPlacement(requestId, sunday, user.id);
 
-  // 2. Feature it (Top-3 order), respecting the cap of 3.
-  const existingPick = await db.videoTop3Item.findFirst({
-    where: { sunday, requestId },
-    select: { id: true },
-  });
-  if (!existingPick) {
-    const lineup = await loadAnnouncementVideoLineup(sunday);
-    const sortOrder = await nextAvailableSortOrder(sunday, lineup.capacity);
-    if (sortOrder != null) {
+    // 2. Feature it (Top-3 order), respecting the cap of 3.
+    const existingPick = await db.videoTop3Item.findFirst({
+      where: { sunday, requestId },
+      select: { id: true },
+    });
+    if (!existingPick) {
+      const sortOrder = await nextAvailableSortOrder(sunday, lineup.capacity);
+      if (sortOrder == null) {
+        return { ok: false, message: "All three featured positions are already assigned. Replace one on This Week first." };
+      }
       await db.videoTop3Item.create({ data: { sunday, sortOrder, requestId } });
     }
-  }
 
-  revalidateTop3Surfaces();
-  revalidatePath(`/requests/${requestId}`);
+    revalidateTop3Surfaces();
+    revalidatePath(`/requests/${requestId}`);
+    return { ok: true, message: `Added to the ${isoDay(sunday)} Announcement Video.` };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "The event could not be added to the video.",
+    };
+  }
 }
 
 /**
@@ -159,12 +181,8 @@ export async function addTop3Item(fd: FormData) {
   if (!requestId && !label) return; // nothing to add
 
   const lineup = await loadAnnouncementVideoLineup(sunday);
-  const alreadyInLineup = requestId
-    ? lineup.entries.some((entry) => entry.requestId === requestId)
-    : false;
-  const lockedCount = lineup.entries.filter((entry) => entry.locked).length;
-  if (!alreadyInLineup && lockedCount >= lineup.capacity) {
-    throw new Error("Every Announcement Video slot is locked. Unlock or replace one first.");
+  if (!canProtectAnnouncementItem(lineup, requestId)) {
+    throw new Error("Every Announcement Video slot is featured or locked. Replace one first.");
   }
 
   if (requestId) await ensureVideoPlacement(requestId, sunday, user.id);
@@ -235,7 +253,14 @@ export async function replaceTop3Item(fd: FormData) {
   });
   if (!target) return;
 
-  if (requestId) await ensureVideoPlacement(requestId, atMidnight(target.sunday), user.id);
+  if (requestId) {
+    await ensureVideoPlacement(
+      requestId,
+      atMidnight(target.sunday),
+      user.id,
+      target.requestId,
+    );
+  }
 
   // Avoid creating a duplicate pick if the replacement event is already featured
   // that Sunday — in that case just take the target off.

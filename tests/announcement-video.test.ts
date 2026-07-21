@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveAnnouncementVideoLineup,
+  canProtectAnnouncementItem,
   type AnnouncementCandidate,
   type AnnouncementPick,
 } from "@/lib/announcement-video";
@@ -133,5 +134,34 @@ describe("resolveAnnouncementVideoLineup", () => {
       source: "manual",
     });
     expect(lineup.issues[0]).toContain("no scheduled video slide");
+  });
+});
+
+describe("canProtectAnnouncementItem", () => {
+  it("rejects a fourth protected item but permits pinning an automatic slot", () => {
+    const one = candidate("one", "One", 1, "2026-08-01");
+    const two = candidate("two", "Two", 1, "2026-08-02");
+    const auto = candidate("auto", "Automatic", 1, "2026-08-03");
+    const lineup = resolveAnnouncementVideoLineup({
+      sunday,
+      capacity: 3,
+      candidates: [one, two, auto],
+      picks: [pick(one), pick(two, 1)],
+      locks: [],
+    });
+
+    expect(canProtectAnnouncementItem(lineup, auto.requestId)).toBe(true);
+    expect(canProtectAnnouncementItem(lineup, null)).toBe(true);
+
+    const full = resolveAnnouncementVideoLineup({
+      sunday,
+      capacity: 3,
+      candidates: [one, two, auto],
+      picks: [pick(one), pick(two, 1), pick(auto, 2)],
+      locks: [],
+    });
+    expect(canProtectAnnouncementItem(full, null)).toBe(false);
+    expect(canProtectAnnouncementItem(full, "fourth")).toBe(false);
+    expect(canProtectAnnouncementItem(full, one.requestId)).toBe(true);
   });
 });

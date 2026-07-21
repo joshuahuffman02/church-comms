@@ -96,7 +96,13 @@ export function DeliverableList({
                   />
                 )}
                 {d.status !== "skipped" && <ProofActions id={d.id} status={d.status} />}
-                {d.status !== "skipped" && <DeliverableStatusButton id={d.id} status={d.status} />}
+                {d.status !== "skipped" && (
+                  <DeliverableStatusButton
+                    id={d.id}
+                    status={d.status}
+                    label={`${d.channelName} deliverable`}
+                  />
+                )}
                 <DeliverableRemoveButton id={d.id} channelName={d.channelName} />
               </div>
               )}

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isEditor } from "@/lib/roles";
 import { AccessRequiredCard } from "@/components/access-required-card";
+import { PromotionScheduleSelect } from "@/components/promotion-schedule-select";
 
 export default async function NewRequest() {
   const me = await getSessionUser();
@@ -45,6 +46,7 @@ export default async function NewRequest() {
       </select>
       <label className="text-sm text-muted">Event date</label>
       <input name="eventStart" type="date" required className="rounded-2xl border px-4 py-2" />
+      <PromotionScheduleSelect />
       <label className="flex items-center gap-2 text-sm text-muted">
         <input name="needsRegistration" type="checkbox" className="h-4 w-4" />
         Needs registration

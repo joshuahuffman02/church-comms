@@ -76,6 +76,26 @@ export type AnnouncementVideoLineup = {
   issues: string[];
 };
 
+/**
+ * Whether adding a human-protected item can fit without displacing another
+ * featured or locked item. Converting an existing automatic entry into a
+ * featured one is safe because it does not consume another lineup slot.
+ */
+export function canProtectAnnouncementItem(
+  lineup: AnnouncementVideoLineup,
+  requestId: string | null,
+): boolean {
+  const existing = requestId
+    ? lineup.entries.find((entry) => entry.requestId === requestId)
+    : null;
+  if (existing && existing.source !== "automatic") return true;
+
+  const protectedCount = lineup.entries.filter(
+    (entry) => entry.source !== "automatic",
+  ).length;
+  return protectedCount < lineup.capacity;
+}
+
 function candidateEntry(
   candidate: AnnouncementCandidate,
   source: AnnouncementLineupSource,

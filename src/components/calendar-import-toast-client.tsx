@@ -6,7 +6,7 @@ import { useState } from "react";
 
 export function CalendarImportToastClient({ pendingCount }: { pendingCount: number }) {
   const pathname = usePathname();
-  const storageKey = `calendar-import-toast:${pendingCount}`;
+  const storageKey = "calendar-import-toast:dismissed-this-session";
   const [dismissedKey, setDismissedKey] = useState<string | null>(() =>
     typeof window !== "undefined" && window.sessionStorage.getItem(storageKey) === "dismissed"
       ? storageKey
@@ -22,7 +22,11 @@ export function CalendarImportToastClient({ pendingCount }: { pendingCount: numb
   }
 
   return (
-    <div className="no-print fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-sky-200 bg-white/95 p-4 shadow-float backdrop-blur">
+    <div
+      role="status"
+      aria-live="polite"
+      className="no-print fixed bottom-3 left-3 right-3 z-50 rounded-2xl border border-sky-200 bg-white/95 p-4 shadow-float backdrop-blur sm:left-auto sm:w-[min(24rem,calc(100vw-2rem))]"
+    >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <div className="font-bold text-ink">New calendar event{pendingCount === 1 ? "" : "s"} found</div>
@@ -37,7 +41,7 @@ export function CalendarImportToastClient({ pendingCount }: { pendingCount: numb
           type="button"
           onClick={dismiss}
           aria-label="Dismiss calendar notification"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted hover:bg-sky-bg hover:text-ink"
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted hover:bg-sky-bg hover:text-ink"
         >
           x
         </button>

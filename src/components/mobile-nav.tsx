@@ -66,6 +66,14 @@ export function MobileNav({
                 {guardrailCount}
               </span>
             )}
+            {calendarImportCount > 0 && guardrailCount === 0 && (
+              <span
+                aria-label={`${calendarImportCount} calendar events pending review`}
+                className="absolute right-0.5 top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-sky-400 px-1 text-[9px] font-bold text-sky-950"
+              >
+                {calendarImportCount > 99 ? "99+" : calendarImportCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -106,8 +114,11 @@ export function MobileNav({
                       </span>
                     )}
                     {i.badge === "calendar" && calendarImportCount > 0 && (
-                      <span className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700">
-                        {calendarImportCount}
+                      <span
+                        aria-label={`${calendarImportCount} calendar events pending review`}
+                        className="ml-auto rounded-full bg-sky-100 px-2 py-0.5 text-xs font-bold text-sky-700"
+                      >
+                        {calendarImportCount > 99 ? "99+" : calendarImportCount}
                       </span>
                     )}
                   </Link>
