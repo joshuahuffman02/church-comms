@@ -64,7 +64,7 @@ function loadActiveRequests(cutoff: Date, horizonEnd: Date) {
               NOT: { status: "skipped" },
               scheduledAt: { gte: cutoff, lt: horizonEnd },
             },
-            select: { scheduledAt: true },
+            select: { id: true, scheduledAt: true },
           },
         },
       },
@@ -117,7 +117,15 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
   // Key by channelKey + the touch's calendar day; track distinct requestIds.
   const instanceMap = new Map<
     string,
-    { channelKey: string; channelName: string; whenISO: string; capacity: number; requestIds: Set<string>; titles: string[] }
+    {
+      channelKey: string;
+      channelName: string;
+      whenISO: string;
+      capacity: number;
+      requestIds: Set<string>;
+      titles: string[];
+      touchIds: string[];
+    }
   >();
   // --- ChannelWeekLoad[]: windowed/one_shot touches grouped by (channelKey, ISO-week-start). ---
   const weekMap = new Map<
@@ -142,12 +150,14 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
               capacity: ch.capacity ?? DEFAULT_INSTANCE_CAPACITY,
               requestIds: new Set(),
               titles: [],
+              touchIds: [],
             };
             instanceMap.set(key, bucket);
           }
           if (!bucket.requestIds.has(req.id)) {
             bucket.requestIds.add(req.id);
             bucket.titles.push(req.title);
+            bucket.touchIds.push(t.id);
           }
         } else {
           // windowed | one_shot -> per ISO-week (Mon-anchored) density
@@ -177,6 +187,7 @@ export async function getGuardrails(today: Date): Promise<Guardrail[]> {
     capacity: b.capacity,
     requestIds: [...b.requestIds],
     titles: b.titles,
+    touchIds: b.touchIds,
     pickedCount: b.channelKey === "announcement_video" ? pickedBySunday.get(b.whenISO) ?? 0 : undefined,
     pickedRequestIds: b.channelKey === "announcement_video" ? pickedRequestIdsBySunday.get(b.whenISO) ?? [] : undefined,
   }));

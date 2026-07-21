@@ -19,6 +19,7 @@ describe("evaluateCapacity", () => {
         capacity: 3,
         requestIds: ["a", "b", "c", "d"],
         titles: ["VBS", "Baptism", "Brunch", "Lunch"],
+        touchIds: ["touch-a", "touch-b", "touch-c", "touch-d"],
       },
     ];
     const out = evaluateCapacity(loads);
@@ -29,6 +30,7 @@ describe("evaluateCapacity", () => {
     expect(out[0].channelKey).toBe("announcement_video");
     expect(out[0].channelName).toBe("Announcement Video (Top 3)");
     expect(out[0].requestIds).toEqual(["a", "b", "c", "d"]);
+    expect(out[0].requests?.[0]).toEqual({ id: "a", title: "VBS", touchId: "touch-a" });
     expect(out[0].itemCount).toBe(4);
     expect(out[0].capacity).toBe(3);
     expect(out[0].pickedCount).toBe(0);
