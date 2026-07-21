@@ -335,7 +335,13 @@ function Top3Section({
               {item.locked && <span title="New events cannot displace this slot" aria-label="Locked slot">🔒</span>}
               {item.missingTouch && <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-800">slide missing</span>}
             </div>
-            {canEdit && item.pickId && <Top3UnpinButton id={item.pickId} title={item.title} />}
+            {canEdit && item.pickId && (
+              <Top3UnpinButton
+                id={item.pickId}
+                title={item.title}
+                kind={item.source === "awareness" ? "note" : "event"}
+              />
+            )}
           </li>
         ))}
       </ol>

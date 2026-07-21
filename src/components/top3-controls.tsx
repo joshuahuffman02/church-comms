@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
-import { addTop3Item, removeTop3Item, replaceTop3Item } from "@/actions/video-top3";
+import { useActionState, useId, useState, useTransition } from "react";
+import { addTop3Item, moveTop3Item, removeTop3Item, replaceTop3Item } from "@/actions/video-top3";
 
 type Feedback = { ok: boolean; message: string } | null;
 type Option = { id: string; label: string };
@@ -26,6 +26,7 @@ function FeedbackLine({ state }: { state: Feedback }) {
 }
 
 function AddEventForm({ sundayIso, options }: { sundayIso: string; options: Option[] }) {
+  const requestSelectId = useId();
   const [state, action, pending] = useActionState<Feedback, FormData>(
     async (_previous, formData) => {
       try {
@@ -41,12 +42,12 @@ function AddEventForm({ sundayIso, options }: { sundayIso: string; options: Opti
   return (
     <form action={action} className="grid gap-2">
       <input type="hidden" name="sunday" value={sundayIso} />
-      <label htmlFor="top3-request" className="text-xs font-semibold text-ink">
+      <label htmlFor={requestSelectId} className="text-xs font-semibold text-ink">
         Feature an upcoming event
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <select
-          id="top3-request"
+          id={requestSelectId}
           name="requestId"
           required
           defaultValue=""
@@ -67,6 +68,7 @@ function AddEventForm({ sundayIso, options }: { sundayIso: string; options: Opti
 }
 
 function AddAwarenessForm({ sundayIso }: { sundayIso: string }) {
+  const awarenessId = useId();
   const [state, action, pending] = useActionState<Feedback, FormData>(
     async (_previous, formData) => {
       try {
@@ -82,12 +84,12 @@ function AddAwarenessForm({ sundayIso }: { sundayIso: string }) {
   return (
     <form action={action} className="grid gap-2">
       <input type="hidden" name="sunday" value={sundayIso} />
-      <label htmlFor="top3-awareness" className="text-xs font-semibold text-ink">
+      <label htmlFor={awarenessId} className="text-xs font-semibold text-ink">
         Or add a short awareness note
       </label>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
-          id="top3-awareness"
+          id={awarenessId}
           name="label"
           required
           maxLength={120}
@@ -179,7 +181,59 @@ export function Top3Controls({
   );
 }
 
-export function Top3UnpinButton({ id, title }: { id: string; title: string }) {
+/** Mount the heavier select controls only when a person chooses to manage a week. */
+export function Top3ManagePanel({
+  sundayIso,
+  options,
+  removable,
+  protectedFull,
+  capacity,
+}: {
+  sundayIso: string;
+  options: Option[];
+  removable: Removable[];
+  protectedFull: boolean;
+  capacity: number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-4 rounded-2xl border border-violet-200/70 bg-violet-50/50 px-4 py-3">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex min-h-9 w-full items-center justify-between gap-3 text-left text-sm font-bold text-violet-900"
+        aria-expanded={open}
+      >
+        <span>Manage this Sunday’s lineup</span>
+        <span aria-hidden="true" className={`transition ${open ? "rotate-90" : ""}`}>›</span>
+      </button>
+      {open && (
+        <div className="mt-2 border-t border-violet-200/60 pt-3">
+          <p className="mb-3 text-xs text-violet-900/75">
+            Add an event, add an awareness note, or replace a protected slot without leaving this page.
+          </p>
+          <Top3Controls
+            sundayIso={sundayIso}
+            options={options}
+            removable={removable}
+            protectedFull={protectedFull}
+            capacity={capacity}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Top3UnpinButton({
+  id,
+  title,
+  kind = "event",
+}: {
+  id: string;
+  title: string;
+  kind?: "event" | "note";
+}) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -198,12 +252,109 @@ export function Top3UnpinButton({ id, title }: { id: string; title: string }) {
             }
           });
         }}
-        className="min-h-11 rounded-xl px-3 text-xs font-semibold text-muted hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
-        aria-label={`Unpin ${title} from the announcement video lineup`}
+        className="min-h-9 rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-muted transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-60"
+        aria-label={kind === "note"
+          ? `Remove ${title} from the announcement video lineup`
+          : `Stop featuring ${title}; allow it to be selected automatically`}
       >
-        {pending ? "Saving…" : "Unpin"}
+        {pending ? "Saving…" : kind === "note" ? "Remove note" : "Make automatic"}
       </button>
       {error && <span role="alert" className="max-w-48 text-right text-[10px] font-semibold text-red-700">{error}</span>}
+    </span>
+  );
+}
+
+export function Top3PinButton({
+  requestId,
+  title,
+  sundayIso,
+}: {
+  requestId: string;
+  title: string;
+  sundayIso: string;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => {
+          setError(null);
+          start(async () => {
+            const formData = new FormData();
+            formData.set("requestId", requestId);
+            formData.set("sunday", sundayIso);
+            try {
+              await addTop3Item(formData);
+            } catch (caught) {
+              setError(messageFrom(caught));
+            }
+          });
+        }}
+        className="min-h-9 rounded-full border border-violet-200 px-3 py-1 text-xs font-semibold text-violet-700 transition hover:bg-violet-50 disabled:opacity-60"
+        aria-label={`Feature ${title} so it keeps a place in this lineup`}
+        title="Feature this event so automatic ranking cannot replace it"
+      >
+        {pending ? "Saving…" : "Feature"}
+      </button>
+      {error && <span role="alert" className="max-w-56 text-right text-[10px] font-semibold text-red-700">{error}</span>}
+    </span>
+  );
+}
+
+export function Top3MoveButtons({
+  id,
+  title,
+  canMoveUp,
+  canMoveDown,
+}: {
+  id: string;
+  title: string;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const move = (direction: "up" | "down") => {
+    setError(null);
+    start(async () => {
+      try {
+        await moveTop3Item(id, direction);
+      } catch (caught) {
+        setError(messageFrom(caught));
+      }
+    });
+  };
+
+  return (
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <span className="inline-flex overflow-hidden rounded-full border border-slate-200 bg-white/70">
+        <button
+          type="button"
+          disabled={pending || !canMoveUp}
+          onClick={() => move("up")}
+          className="min-h-9 border-r border-slate-200 px-3 text-xs font-semibold text-muted transition hover:bg-sky-bg disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label={`Move ${title} earlier in the lineup`}
+          title="Move earlier"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          disabled={pending || !canMoveDown}
+          onClick={() => move("down")}
+          className="min-h-9 px-3 text-xs font-semibold text-muted transition hover:bg-sky-bg disabled:cursor-not-allowed disabled:opacity-30"
+          aria-label={`Move ${title} later in the lineup`}
+          title="Move later"
+        >
+          ↓
+        </button>
+      </span>
+      {error && <span role="alert" className="max-w-56 text-right text-[10px] font-semibold text-red-700">{error}</span>}
     </span>
   );
 }

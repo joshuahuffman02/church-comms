@@ -234,6 +234,40 @@ export async function removeTop3Item(id: string) {
   revalidateTop3Surfaces();
 }
 
+/** Move a featured/awareness item one position within its Sunday lineup. */
+export async function moveTop3Item(id: string, direction: "up" | "down") {
+  await requireEditor();
+  if (direction !== "up" && direction !== "down") throw new Error("Bad move direction");
+
+  const item = await db.videoTop3Item.findUnique({
+    where: { id },
+    select: { id: true, sunday: true, sortOrder: true },
+  });
+  if (!item) return;
+
+  const neighbor = await db.videoTop3Item.findFirst({
+    where: {
+      sunday: item.sunday,
+      sortOrder: direction === "up" ? { lt: item.sortOrder } : { gt: item.sortOrder },
+    },
+    orderBy: { sortOrder: direction === "up" ? "desc" : "asc" },
+    select: { id: true, sortOrder: true },
+  });
+  if (!neighbor) return;
+
+  const lowest = await db.videoTop3Item.aggregate({
+    where: { sunday: item.sunday },
+    _min: { sortOrder: true },
+  });
+  const temporaryOrder = (lowest._min.sortOrder ?? 0) - 1;
+  await db.$transaction(async (tx) => {
+    await tx.videoTop3Item.update({ where: { id: item.id }, data: { sortOrder: temporaryOrder } });
+    await tx.videoTop3Item.update({ where: { id: neighbor.id }, data: { sortOrder: item.sortOrder } });
+    await tx.videoTop3Item.update({ where: { id: item.id }, data: { sortOrder: neighbor.sortOrder } });
+  });
+  revalidateTop3Surfaces();
+}
+
 /**
  * Swap one Top-3 pick for another in a single step: drop `removeId` and add the
  * chosen event/label in the SAME slot (same Sunday + sortOrder), so curating a
