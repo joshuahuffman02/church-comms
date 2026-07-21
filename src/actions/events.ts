@@ -221,17 +221,19 @@ export async function mergeDuplicateEvents(requestIds: string[]): Promise<MergeD
           const preferredStatus = (TOUCH_STATUS_WEIGHT[touch.status] ?? 0) > (TOUCH_STATUS_WEIGHT[existingTouch.status] ?? 0)
             ? touch.status
             : existingTouch.status;
+          const mergedTouch = {
+            status: preferredStatus,
+            removedAt: existingTouch.removedAt ?? touch.removedAt,
+            purposeLabel: richerText([existingTouch.purposeLabel, touch.purposeLabel]),
+            content: richerText([existingTouch.content, touch.content]),
+            assetLink: richerText([existingTouch.assetLink, touch.assetLink]),
+            note: richerText([existingTouch.note, touch.note]),
+          };
           await tx.touch.update({
             where: { id: existingTouch.id },
-            data: {
-              status: preferredStatus,
-              removedAt: existingTouch.removedAt ?? touch.removedAt,
-              purposeLabel: richerText([existingTouch.purposeLabel, touch.purposeLabel]),
-              content: richerText([existingTouch.content, touch.content]),
-              assetLink: richerText([existingTouch.assetLink, touch.assetLink]),
-              note: richerText([existingTouch.note, touch.note]),
-            },
+            data: mergedTouch,
           });
+          Object.assign(existingTouch, mergedTouch);
           await tx.touch.delete({ where: { id: touch.id } });
         }
 
@@ -242,19 +244,21 @@ export async function mergeDuplicateEvents(requestIds: string[]): Promise<MergeD
         const dueDates = [existing.productionDueAt, deliverable.productionDueAt]
           .filter((date): date is Date => !!date)
           .sort((a, b) => a.getTime() - b.getTime());
+        const mergedDeliverable = {
+          status: preferredStatus,
+          productionDueAt: dueDates[0] ?? null,
+          skippedReason: preferredStatus === "skipped"
+            ? richerText([existing.skippedReason, deliverable.skippedReason])
+            : null,
+          assetLink: richerText([existing.assetLink, deliverable.assetLink]),
+          notes: richerText([existing.notes, deliverable.notes]),
+          ownerId: existing.ownerId ?? deliverable.ownerId,
+        };
         await tx.deliverable.update({
           where: { id: existing.id },
-          data: {
-            status: preferredStatus,
-            productionDueAt: dueDates[0] ?? null,
-            skippedReason: preferredStatus === "skipped"
-              ? richerText([existing.skippedReason, deliverable.skippedReason])
-              : null,
-            assetLink: richerText([existing.assetLink, deliverable.assetLink]),
-            notes: richerText([existing.notes, deliverable.notes]),
-            ownerId: existing.ownerId ?? deliverable.ownerId,
-          },
+          data: mergedDeliverable,
         });
+        Object.assign(existing, mergedDeliverable);
         await tx.deliverable.delete({ where: { id: deliverable.id } });
       }
     }
