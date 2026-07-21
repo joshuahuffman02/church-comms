@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { mergeDuplicateEvents } from "@/actions/events";
+import { turnEventsIntoRecurringSeries } from "@/actions/recurring";
 import { MinistryDots, type MinistryDot } from "@/components/ministry-dots";
 import { tierLabel, tierTitle } from "@/lib/labels";
 import { REQUEST_SIDE_STATUSES, REQUEST_STATUSES, REQUEST_STATUS_META } from "@/lib/status";
@@ -30,6 +33,7 @@ export type RequestRow = {
   needsRegistration: boolean;
   ownerName: string | null;
   source: EventSource;
+  seriesId: string | null;
 };
 
 export type RequestFilters = {
@@ -219,7 +223,50 @@ function EventSection({
   );
 }
 
-function DuplicateSection({ groups, todayMs }: { groups: EventDuplicateGroup<RequestRow>[]; todayMs: number }) {
+function MergeCopiesButton({ group }: { group: EventDuplicateGroup<RequestRow> }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+
+  function merge() {
+    if (!window.confirm(
+      `Merge ${group.rows.length} copies of “${group.title}”?\n\nThe best source-linked copy will be kept. Channels, tasks, ownership, and notes will be combined; extra source records will be archived so sync cannot recreate them.`,
+    )) return;
+    setMessage(null);
+    startTransition(async () => {
+      const result = await mergeDuplicateEvents(group.rows.map((row) => row.id));
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="text-right">
+      <button
+        type="button"
+        onClick={merge}
+        disabled={pending}
+        className="min-h-11 rounded-full border border-rose-300 bg-white px-4 py-2 text-sm font-bold text-rose-800 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-60"
+      >
+        {pending ? "Merging…" : "Merge copies"}
+      </button>
+      {message && <p role="alert" className="mt-2 max-w-xs text-xs font-semibold text-rose-700">{message}</p>}
+    </div>
+  );
+}
+
+function DuplicateSection({
+  groups,
+  todayMs,
+  canEdit,
+}: {
+  groups: EventDuplicateGroup<RequestRow>[];
+  todayMs: number;
+  canEdit: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
   if (groups.length === 0) return null;
   const style = SECTION_STYLE.duplicate;
@@ -243,7 +290,11 @@ function DuplicateSection({ groups, todayMs }: { groups: EventDuplicateGroup<Req
                 <h3 className="font-bold text-ink">{group.title}</h3>
                 <p className="text-sm text-muted">{formatDate(group.eventStartMs)} · {group.rows.length} copies</p>
               </div>
-              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-rose-800">Review both</span>
+              {canEdit ? (
+                <MergeCopiesButton group={group} />
+              ) : (
+                <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-rose-800">Review copies</span>
+              )}
             </div>
             <div className="grid gap-2">{group.rows.map((row) => <EventRow key={row.id} row={row} todayMs={todayMs} duplicate />)}</div>
           </article>
@@ -263,7 +314,42 @@ function DuplicateSection({ groups, todayMs }: { groups: EventDuplicateGroup<Req
   );
 }
 
-function RepeatGroupCard({ group }: { group: EventRepeatGroup<RequestRow> }) {
+function TurnIntoSeriesButton({ group }: { group: EventRepeatGroup<RequestRow> }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<string | null>(null);
+  const hasOverlap = group.duplicateDateCount > 0;
+
+  function convert() {
+    setMessage(null);
+    startTransition(async () => {
+      const result = await turnEventsIntoRecurringSeries(group.rows.map((row) => row.id));
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
+      router.push(`/recurring?created=${encodeURIComponent(result.seriesId)}`);
+    });
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={convert}
+        disabled={pending || hasOverlap}
+        title={hasOverlap ? "Merge the duplicate dates above before creating a series." : undefined}
+        className="min-h-11 rounded-full bg-sky-700 px-4 py-2 text-sm font-bold text-white hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+      >
+        {pending ? "Creating series…" : "Turn into recurring series"}
+      </button>
+      {hasOverlap && <p className="mt-1 text-xs font-semibold text-rose-700">Merge overlapping dates first</p>}
+      {message && <p role="alert" className="mt-2 max-w-xs text-xs font-semibold text-rose-700">{message}</p>}
+    </div>
+  );
+}
+
+function RepeatGroupCard({ group, canEdit }: { group: EventRepeatGroup<RequestRow>; canEdit: boolean }) {
   const sources = [...new Set(group.rows.map((row) => SOURCE_META[row.source].label))];
   const query = new URLSearchParams({ view: "repeating", q: group.title, status: "active" }).toString();
   return (
@@ -285,13 +371,14 @@ function RepeatGroupCard({ group }: { group: EventRepeatGroup<RequestRow> }) {
           <Link href={`/requests?${query}`} className="mt-2 inline-flex min-h-11 items-center rounded-full px-3 text-sm font-semibold text-sky-700 hover:bg-sky-bg">
             Review occurrences →
           </Link>
+          {canEdit && <TurnIntoSeriesButton group={group} />}
         </div>
       </div>
     </article>
   );
 }
 
-function RepeatSection({ groups }: { groups: EventRepeatGroup<RequestRow>[] }) {
+function RepeatSection({ groups, canEdit }: { groups: EventRepeatGroup<RequestRow>[]; canEdit: boolean }) {
   if (groups.length === 0) return null;
   const style = SECTION_STYLE.repeating;
   return (
@@ -304,7 +391,7 @@ function RepeatSection({ groups }: { groups: EventRepeatGroup<RequestRow>[] }) {
         </div>
         <span className={`rounded-full px-3 py-1 text-sm font-bold ${style.badge}`}>{groups.length} patterns</span>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">{groups.map((group) => <RepeatGroupCard key={group.key} group={group} />)}</div>
+      <div className="grid gap-3 md:grid-cols-2">{groups.map((group) => <RepeatGroupCard key={group.key} group={group} canEdit={canEdit} />)}</div>
     </section>
   );
 }
@@ -537,10 +624,10 @@ export function RequestsTable({ rows, initialFilters = DEFAULT_FILTERS, canEdit 
 
       {filters.view === "focus" && (
         <div className="grid gap-5">
-          <DuplicateSection groups={visibleFocus.duplicateGroups} todayMs={todayMs} />
+          <DuplicateSection groups={visibleFocus.duplicateGroups} todayMs={todayMs} canEdit={canEdit} />
           <EventSection title="Needs a decision" eyebrow="Review next" description="One-off events in the next 60 days that still need approval or more information." rows={visibleFocus.needsDecision} tone="attention" todayMs={todayMs} />
           <EventSection title="Promotion is active" eyebrow="Moving forward" description="Approved one-off events in the next 60 days. Open an event to adjust channels, timing, or ownership." rows={visibleFocus.promotingNow} tone="active" todayMs={todayMs} initialRows={8} />
-          <RepeatSection groups={visibleFocus.repeatedGroups} />
+          <RepeatSection groups={visibleFocus.repeatedGroups} canEdit={canEdit} />
           {visibleFocus.later.length > 0 && (
             <section className="card-float border-l-[5px] border-l-slate-400 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -574,8 +661,8 @@ export function RequestsTable({ rows, initialFilters = DEFAULT_FILTERS, canEdit 
 
       {filters.view === "repeating" && (
         <div className="grid gap-5">
-          <DuplicateSection groups={visibleFocus.duplicateGroups} todayMs={todayMs} />
-          <RepeatSection groups={repeating} />
+          <DuplicateSection groups={visibleFocus.duplicateGroups} todayMs={todayMs} canEdit={canEdit} />
+          <RepeatSection groups={repeating} canEdit={canEdit} />
           {visibleFocus.duplicateGroups.length === 0 && repeating.length === 0 && <div className="card-float p-8 text-center text-sm text-muted">No repeating or duplicate events match these filters.</div>}
         </div>
       )}

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { occurrenceDates, cadenceSummary, type SeriesLike } from "../src/lib/recurrence";
+import {
+  occurrenceDates,
+  cadenceSummary,
+  inferRecurrencePattern,
+  type SeriesLike,
+} from "../src/lib/recurrence";
 import { atMidnight } from "../src/lib/engine/dates";
 
 // Helper: build a series with sensible defaults, overriding per test.
@@ -75,6 +80,22 @@ describe("occurrenceDates — weekly", () => {
   });
 });
 
+describe("occurrenceDates — daily", () => {
+  it("supports daily and every-N-days series", () => {
+    const daily = occurrenceDates(
+      series({ frequency: "daily" }),
+      atMidnight(new Date("2026-06-05")),
+    );
+    expect(daily.map(iso)).toEqual(["2026-06-02", "2026-06-03", "2026-06-04", "2026-06-05"]);
+
+    const everyThreeDays = occurrenceDates(
+      series({ frequency: "daily", interval: 3 }),
+      atMidnight(new Date("2026-06-11")),
+    );
+    expect(everyThreeDays.map(iso)).toEqual(["2026-06-02", "2026-06-05", "2026-06-08", "2026-06-11"]);
+  });
+});
+
 describe("occurrenceDates — monthly, forever (untilDate null)", () => {
   it("monthly with no end date is bounded only by the horizon", () => {
     // "Missionary of the Month": monthly on the 1st, no end. 120-day horizon
@@ -141,6 +162,11 @@ describe("occurrenceDates — monthly", () => {
 });
 
 describe("cadenceSummary", () => {
+  it("describes daily cadences in plain English", () => {
+    expect(cadenceSummary(series({ frequency: "daily" }))).toBe("Every day");
+    expect(cadenceSummary(series({ frequency: "daily", interval: 3 }))).toBe("Every 3 days");
+  });
+
   it("describes weekly cadences in plain English", () => {
     expect(cadenceSummary(series({ weekday: 2 }))).toBe("Every week on Tuesday");
     expect(cadenceSummary(series({ interval: 2, weekday: 1 }))).toBe("Every 2 weeks on Monday");
@@ -151,5 +177,35 @@ describe("cadenceSummary", () => {
     expect(cadenceSummary(series({ frequency: "monthly", interval: 3, dayOfMonth: 1 }))).toBe(
       "Every 3 months on day 1"
     );
+  });
+});
+
+describe("inferRecurrencePattern", () => {
+  const dates = (...values: string[]) => values.map((value) => atMidnight(new Date(value)));
+
+  it("infers daily, weekly, every-four-weeks, and monthly patterns", () => {
+    expect(inferRecurrencePattern(dates("2026-08-03", "2026-08-04", "2026-08-05"))).toMatchObject({
+      frequency: "daily",
+      interval: 1,
+    });
+    expect(inferRecurrencePattern(dates("2026-07-22", "2026-07-29", "2026-08-05"))).toMatchObject({
+      frequency: "weekly",
+      interval: 1,
+      weekday: 3,
+    });
+    expect(inferRecurrencePattern(dates("2026-09-14", "2026-10-12", "2026-11-09"))).toMatchObject({
+      frequency: "weekly",
+      interval: 4,
+      weekday: 1,
+    });
+    expect(inferRecurrencePattern(dates("2026-07-31", "2026-08-31", "2026-09-30"))).toMatchObject({
+      frequency: "monthly",
+      interval: 1,
+      dayOfMonth: 31,
+    });
+  });
+
+  it("refuses irregular patterns instead of inventing missing occurrences", () => {
+    expect(inferRecurrencePattern(dates("2026-07-22", "2026-07-29", "2026-08-12"))).toBeNull();
   });
 });

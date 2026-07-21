@@ -357,7 +357,7 @@ model RecurringSeries {
   whoIsItFor   String    @default("whole_church")
   nextStepText String?
   location     String?
-  frequency    String // "weekly" | "monthly"
+  frequency    String // "daily" | "weekly" | "monthly"
   interval     Int       @default(1)
   weekday      Int? // 0=Sun..6=Sat, for weekly (null = startDate's weekday)
   dayOfMonth   Int? // 1-31, for monthly (null = startDate's day; clamped to month length)

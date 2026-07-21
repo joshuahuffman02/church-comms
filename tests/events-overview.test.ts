@@ -45,6 +45,15 @@ describe("events overview", () => {
     expect(repeated[0].rows).toHaveLength(3);
   });
 
+  it("stops treating occurrences as imported cleanup once a series manages them", () => {
+    const repeated = groupRepeatedEventTitles([
+      { ...row("a", "Morning Prayer", 0), seriesId: "series-1" },
+      { ...row("b", "Morning Prayer", 7), seriesId: "series-1" },
+      { ...row("c", "Morning Prayer", 14), seriesId: "series-1" },
+    ]);
+    expect(repeated).toEqual([]);
+  });
+
   it("keeps duplicates and routine repeats out of the short decision list", () => {
     const rows = [
       row("dup-1", "Prayerwerks", 0),
