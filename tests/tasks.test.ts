@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { effectiveOwnerId, bucketForTask } from "../src/lib/tasks";
+import {
+  effectiveOwnerId,
+  bucketForTask,
+  focusMyTasks,
+  type MyTask,
+  type MyTasksResult,
+} from "../src/lib/tasks";
 import { atMidnight, addDays } from "../src/lib/engine/dates";
 
 describe("effectiveOwnerId precedence", () => {
@@ -56,5 +62,49 @@ describe("bucketForTask", () => {
         bucketForTask({ productionDueAt: addDays(today, -5), status }, today)
       ).toBeNull();
     }
+  });
+});
+
+describe("focusMyTasks", () => {
+  const today = atMidnight(new Date("2026-07-21"));
+  let id = 0;
+  const task = (due: Date | null): MyTask => ({
+    id: `task-${id++}`,
+    requestId: `event-${id}`,
+    requestTitle: "Event",
+    eventStart: addDays(today, 45),
+    channelName: "Channel",
+    channelColor: "#000000",
+    status: "to_design",
+    productionDueAt: due,
+    explicitOwner: false,
+  });
+
+  it("separates older overdue work from the two-week focus window", () => {
+    const tasks: MyTasksResult = {
+      overdue: [task(addDays(today, -30)), task(addDays(today, -14)), task(addDays(today, -1))],
+      thisWeek: [],
+      awaitingProof: [],
+      upcoming: [],
+      total: 3,
+    };
+    const result = focusMyTasks(tasks, today);
+    expect(result.oldBacklog).toHaveLength(1);
+    expect(result.recentOverdue).toHaveLength(2);
+    expect(result.actionTotal).toBe(2);
+  });
+
+  it("shows the next 30 days and keeps later or undated work out of focus", () => {
+    const tasks: MyTasksResult = {
+      overdue: [],
+      thisWeek: [task(addDays(today, 2))],
+      awaitingProof: [task(addDays(today, -20))],
+      upcoming: [task(addDays(today, 30)), task(addDays(today, 31)), task(null)],
+      total: 5,
+    };
+    const result = focusMyTasks(tasks, today);
+    expect(result.nearTerm).toHaveLength(1);
+    expect(result.later).toHaveLength(2);
+    expect(result.actionTotal).toBe(2);
   });
 });

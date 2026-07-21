@@ -21,6 +21,7 @@ function revalidateRequestSchedule(id: string) {
   revalidatePath("/requests");
   revalidatePath("/pipeline");
   revalidatePath("/this-week");
+  revalidatePath("/my-tasks");
   revalidatePath("/run-sheet");
   revalidatePath("/calendar");
   revalidatePath("/outputs");
