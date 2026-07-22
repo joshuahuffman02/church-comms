@@ -25,6 +25,7 @@ function pipelineFiltersFromParams(params: SearchParams): PipelineFilters {
     owner: firstParam(params.owner),
     status: firstParam(params.status),
     view: firstParam(params.view),
+    group: firstParam(params.group),
   };
 }
 
@@ -67,7 +68,7 @@ export default async function PipelinePage({
         status: true,
         productionDueAt: true,
         ownerId: true,
-        channel: { select: { name: true, color: true } },
+        channel: { select: { key: true, name: true, color: true } },
         owner: { select: { name: true } },
         touches: {
           where: { scheduledAt: { gte: today } },
@@ -111,6 +112,7 @@ export default async function PipelinePage({
       productionDueAtMs: d.productionDueAt ? d.productionDueAt.getTime() : null,
       nextScheduledAtMs: d.touches[0]?.scheduledAt.getTime() ?? null,
       channelName: d.channel.name,
+      channelKey: d.channel.key,
       channelColor: d.channel.color,
       ministries: d.request.ministries.map((m) => ({ name: m.name, color: m.color })),
       ownerId,

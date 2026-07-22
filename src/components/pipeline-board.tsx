@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { CheckCircle2, Clapperboard, Palette, PenLine, Send, UserRound } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -14,11 +15,15 @@ import {
 import { setDeliverableStatus } from "@/actions/request-status";
 import { assignDeliverableOwner } from "@/actions/tasks";
 import { DeliverableStatusButton } from "@/components/deliverable-status-button";
-import { DELIVERABLE_STATUS_META } from "@/lib/status";
+import { DELIVERABLE_STATUS_HELP, DELIVERABLE_STATUS_META } from "@/lib/status";
 import { MinistryDots, type MinistryDot } from "@/components/ministry-dots";
 import type { ActiveUser } from "@/components/owner-assign";
 import { channelWorkLabel, tierLabel, tierTitle } from "@/lib/labels";
-import { focusProductionItems } from "@/lib/production";
+import {
+  focusProductionItems,
+  productionWorkBrief,
+  type ProductionWorkKind,
+} from "@/lib/production";
 import { atMidnight } from "@/lib/engine/dates";
 
 export type DeliverableCard = {
@@ -30,6 +35,7 @@ export type DeliverableCard = {
   eventStartMs: number;
   productionDueAtMs: number | null;
   nextScheduledAtMs: number | null;
+  channelKey: string;
   channelName: string;
   channelColor: string;
   ministries: MinistryDot[];
@@ -50,7 +56,9 @@ const BOARD_COLUMNS = [
 ] as const;
 
 type PipelineView = "focus" | "board" | "backlog" | "later";
+type FocusGrouping = "urgency" | "channel" | "work";
 const PIPELINE_VIEWS = new Set<PipelineView>(["focus", "board", "backlog", "later"]);
+const FOCUS_GROUPINGS = new Set<FocusGrouping>(["urgency", "channel", "work"]);
 const UNASSIGNED = "__unassigned__";
 const EVENT_OWNER = "__event_owner__";
 
@@ -60,6 +68,7 @@ export type PipelineFilters = {
   owner: string;
   status: string;
   view: string;
+  group: string;
 };
 
 const DEFAULT_FILTERS: PipelineFilters = {
@@ -68,6 +77,7 @@ const DEFAULT_FILTERS: PipelineFilters = {
   owner: "",
   status: "",
   view: "focus",
+  group: "urgency",
 };
 
 type EventGroup = {
@@ -100,6 +110,36 @@ function dueLabel(ms: number | null, todayMs: number): { text: string; className
   if (days === 0) return { text: "Due today", className: "bg-amber-100 text-amber-800" };
   if (days === 1) return { text: "Due tomorrow", className: "bg-violet-100 text-violet-800" };
   return { text: `Due ${fmt(ms)}`, className: "bg-slate-100 text-slate-700" };
+}
+
+const WORK_KIND_STYLE: Record<ProductionWorkKind, string> = {
+  writing: "bg-sky-50 text-sky-800 ring-sky-200",
+  graphics: "bg-violet-50 text-violet-800 ring-violet-200",
+  video: "bg-rose-50 text-rose-800 ring-rose-200",
+  publishing: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+};
+
+function WorkKindIcon({ kind }: { kind: ProductionWorkKind }) {
+  const className = "h-3.5 w-3.5";
+  if (kind === "graphics") return <Palette className={className} aria-hidden="true" />;
+  if (kind === "video") return <Clapperboard className={className} aria-hidden="true" />;
+  if (kind === "publishing") return <Send className={className} aria-hidden="true" />;
+  return <PenLine className={className} aria-hidden="true" />;
+}
+
+function WorkBrief({ card, compact = false }: { card: DeliverableCard; compact?: boolean }) {
+  const brief = productionWorkBrief(card.channelKey, card.channelName, card.status);
+  return (
+    <div className={compact ? "mt-2" : "mt-2 flex flex-wrap items-center gap-2"}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ring-1 ring-inset ${WORK_KIND_STYLE[brief.kind]}`}>
+        <WorkKindIcon kind={brief.kind} />
+        {brief.label}
+      </span>
+      <span className={`${compact ? "mt-1 block" : ""} text-xs font-medium text-slate-600`}>
+        <span className="font-bold text-slate-700">Next:</span> {brief.nextAction}
+      </span>
+    </div>
+  );
 }
 
 function groupByEvent(cards: DeliverableCard[]): EventGroup[] {
@@ -138,7 +178,7 @@ function ProductionOwnerSelect({
   const workLabel = channelWorkLabel(card.channelName);
   return (
     <label className="inline-flex items-center gap-1.5">
-      <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Piece owner</span>
+      <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Owner · {workLabel}</span>
       <select
         value={value}
         disabled={disabled}
@@ -189,6 +229,7 @@ function ProductionRow({
           )}
         </div>
         <p className="mt-1 text-xs text-muted">Channel: {card.channelName.replace(/\s*\(Top 3\)$/i, "")}</p>
+        <WorkBrief card={card} />
         {!canEdit && (
           <p className="mt-1 text-xs text-muted">{card.ownerName ? `Piece owner: ${card.ownerName}` : "No piece owner"}</p>
         )}
@@ -351,6 +392,72 @@ function ProductionSection({
   );
 }
 
+type FocusSectionGroup = {
+  key: string;
+  title: string;
+  description: string;
+  tone: keyof typeof SECTION_STYLE;
+  cards: DeliverableCard[];
+};
+
+function alternateFocusGroups(cards: DeliverableCard[], grouping: Exclude<FocusGrouping, "urgency">): FocusSectionGroup[] {
+  if (grouping === "channel") {
+    const byChannel = new Map<string, DeliverableCard[]>();
+    for (const card of cards) {
+      const current = byChannel.get(card.channelName) ?? [];
+      current.push(card);
+      byChannel.set(card.channelName, current);
+    }
+    return [...byChannel.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([channelName, channelCards]) => ({
+        key: channelName,
+        title: channelName.replace(/\s*\(Top 3\)$/i, ""),
+        description: "All current work for this channel, still grouped by event below.",
+        tone: "upcoming",
+        cards: channelCards,
+      }));
+  }
+
+  const byKind = new Map<ProductionWorkKind, DeliverableCard[]>();
+  for (const card of cards) {
+    const { kind } = productionWorkBrief(card.channelKey, card.channelName, card.status);
+    const current = byKind.get(kind) ?? [];
+    current.push(card);
+    byKind.set(kind, current);
+  }
+  const order: ProductionWorkKind[] = ["writing", "graphics", "video", "publishing"];
+  const descriptions: Record<ProductionWorkKind, string> = {
+    writing: "Copy and spoken wording that needs to be written or finished.",
+    graphics: "Slides, signs, print pieces, and other visual assets.",
+    video: "Announcement segments that need scripting, recording, or editing.",
+    publishing: "Approved pieces that now need scheduling, placement, or a final go-live check.",
+  };
+  const tones: Record<ProductionWorkKind, keyof typeof SECTION_STYLE> = {
+    writing: "upcoming",
+    graphics: "week",
+    video: "overdue",
+    publishing: "ready",
+  };
+  const labels: Record<ProductionWorkKind, string> = {
+    writing: "Writing",
+    graphics: "Graphics",
+    video: "Video",
+    publishing: "Scheduling / publishing",
+  };
+  return order.flatMap((kind) => {
+    const kindCards = byKind.get(kind);
+    if (!kindCards?.length) return [];
+    return [{
+      key: kind,
+      title: labels[kind],
+      description: descriptions[kind],
+      tone: tones[kind],
+      cards: kindCards,
+    }];
+  });
+}
+
 function BoardCard({
   card,
   canEdit,
@@ -384,6 +491,7 @@ function BoardCard({
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: card.channelColor }} />
           <span className="font-semibold" style={{ color: card.channelColor }}>{workLabel}</span>
         </div>
+        <WorkBrief card={card} compact />
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
         <span>{card.productionDueAtMs == null ? "No deadline" : `Make by ${fmt(card.productionDueAtMs)}`}</span>
@@ -427,22 +535,28 @@ function BoardColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const meta = DELIVERABLE_STATUS_META[status] ?? { label: status, color: "#94a3b8" };
+  const [limit, setLimit] = useState(12);
+  const shownCards = cards.slice(0, limit);
+  const remaining = cards.length - shownCards.length;
   return (
     <section
       ref={setNodeRef}
-      className="w-72 shrink-0 rounded-3xl p-3 transition"
+      className="w-72 shrink-0 snap-start rounded-3xl p-3 transition"
       style={{ background: isOver ? `${meta.color}18` : "rgba(255,255,255,0.28)" }}
       aria-label={`${meta.label} production column`}
     >
-      <header className="flex items-center justify-between px-2 pb-3">
-        <span className="flex items-center gap-2 text-sm font-bold">
-          <span className="h-3 w-3 rounded-full" style={{ background: meta.color }} />
-          {meta.label}
-        </span>
-        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-muted">{cards.length}</span>
+      <header className="px-2 pb-3">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2 text-sm font-bold">
+            <span className="h-3 w-3 rounded-full" style={{ background: meta.color }} />
+            {meta.label}
+          </span>
+          <span className="rounded-full bg-white px-2 py-0.5 text-xs font-bold text-muted">{cards.length}</span>
+        </div>
+        <p className="mt-1 text-[11px] leading-4 text-muted">{DELIVERABLE_STATUS_HELP[status]}</p>
       </header>
       {cards.length === 0 && <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-muted">No pieces here</div>}
-      {cards.map((card) => (
+      {shownCards.map((card) => (
         <BoardCard
           key={card.id}
           card={card}
@@ -453,6 +567,15 @@ function BoardColumn({
           onAssign={onAssign}
         />
       ))}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setLimit((current) => current + 12)}
+          className="mt-1 min-h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-sky-700 hover:bg-sky-50"
+        >
+          Show {Math.min(12, remaining)} more · {remaining} hidden
+        </button>
+      )}
     </section>
   );
 }
@@ -464,6 +587,7 @@ function filtersFromSearchParams(params: URLSearchParams): PipelineFilters {
     owner: params.get("owner") ?? "",
     status: params.get("status") ?? "",
     view: params.get("view") ?? "focus",
+    group: params.get("group") ?? "urgency",
   };
 }
 
@@ -473,12 +597,14 @@ function sanitizeFilters(filters: PipelineFilters, cards: DeliverableCard[]): Pi
   const statuses = new Set(cards.map((card) => card.status));
   const owner = filters.owner === UNASSIGNED || owners.has(filters.owner) ? filters.owner : "";
   const view = PIPELINE_VIEWS.has(filters.view as PipelineView) ? filters.view : "focus";
+  const group = FOCUS_GROUPINGS.has(filters.group as FocusGrouping) ? filters.group : "urgency";
   return {
     q: filters.q,
     channel: filters.channel === "" || channels.has(filters.channel) ? filters.channel : "",
     owner,
     status: filters.status === "" || statuses.has(filters.status) ? filters.status : "",
     view,
+    group,
   };
 }
 
@@ -490,6 +616,7 @@ function writeFiltersToUrl(filters: PipelineFilters) {
   if (filters.owner) params.set("owner", filters.owner);
   if (filters.status) params.set("status", filters.status);
   if (filters.view && filters.view !== "focus") params.set("view", filters.view);
+  if (filters.group && filters.group !== "urgency") params.set("group", filters.group);
   const query = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
 }
@@ -560,9 +687,42 @@ export function PipelineBoard({
 
   const focus = useMemo(() => focusProductionItems(visible, new Date(todayMs)), [visible, todayMs]);
   const allFocus = useMemo(() => focusProductionItems(items, new Date(todayMs)), [items, todayMs]);
+  const allAttention = useMemo(() => [
+    ...allFocus.proof,
+    ...allFocus.ready,
+    ...allFocus.inProgress,
+    ...allFocus.recentOverdue,
+    ...allFocus.thisWeek,
+  ], [allFocus]);
+  const workload = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const card of allAttention) {
+      const owner = card.ownerName ?? UNASSIGNED;
+      counts.set(owner, (counts.get(owner) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => {
+      if (a[0] === UNASSIGNED) return -1;
+      if (b[0] === UNASSIGNED) return 1;
+      return b[1] - a[1] || a[0].localeCompare(b[0]);
+    });
+  }, [allAttention]);
+  const focusCurrentCards = useMemo(() => [
+    ...focus.proof,
+    ...focus.ready,
+    ...focus.inProgress,
+    ...focus.recentOverdue,
+    ...focus.thisWeek,
+    ...focus.nearTerm,
+    ...focus.scheduled,
+  ], [focus]);
   const filtered = visible.length !== items.length;
   const capped = totalCurrent > cap;
   const view = filters.view as PipelineView;
+  const grouping = filters.group as FocusGrouping;
+  const alternateSections = useMemo(
+    () => grouping === "urgency" ? [] : alternateFocusGroups(focusCurrentCards, grouping),
+    [focusCurrentCards, grouping],
+  );
 
   useEffect(() => {
     const onPopState = () => setFilters(sanitizeFilters(filtersFromSearchParams(new URLSearchParams(window.location.search)), cards));
@@ -668,8 +828,30 @@ export function PipelineBoard({
           <SummaryCard label="Needs attention" value={focus.actionTotal} detail={filtered ? "Matching filters" : "Now through Sunday"} tone="rose" />
           <SummaryCard label="No piece owner" value={focus.unassignedActionTotal} detail="Inside this focus" tone="amber" />
           <SummaryCard label="Proof review" value={focus.proof.length} detail="Waiting for a decision" tone="violet" />
-          <SummaryCard label="Current queue" value={visible.length} detail={filtered ? `of ${items.length} matching` : "Non-expired pieces"} tone="sky" />
+          <SummaryCard label={filtered ? "Matching pieces" : "Current queue"} value={visible.length} detail={filtered ? `Filtered from ${items.length}` : "Active, non-expired pieces"} tone="sky" />
         </div>
+        {workload.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-slate-100 bg-white/70 px-3 py-3" aria-label="Current production workload by owner">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted">
+              <UserRound className="h-3.5 w-3.5" aria-hidden="true" /> Workload now
+            </span>
+            {workload.map(([owner, count]) => {
+              const value = owner === UNASSIGNED ? UNASSIGNED : owner;
+              const active = filters.owner === value;
+              return (
+                <button
+                  key={owner}
+                  type="button"
+                  onClick={() => updateFilter("owner", active ? "" : value)}
+                  aria-pressed={active}
+                  className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${active ? "bg-ink text-white" : owner === UNASSIGNED ? "bg-amber-100 text-amber-900 hover:bg-amber-200" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
+                >
+                  {owner === UNASSIGNED ? "Unassigned" : owner} · {count}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <p className="mt-3 text-xs font-medium text-muted">
           {expiredHidden} expired {expiredHidden === 1 ? "placement is" : "placements are"} hidden automatically.
           {capped ? ` Showing the ${cap} soonest of ${totalCurrent} current pieces.` : ` ${totalCurrent} current pieces remain available.`}
@@ -700,7 +882,7 @@ export function PipelineBoard({
             </button>
           ))}
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_repeat(3,minmax(10rem,auto))_auto]">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(14rem,1fr)_repeat(4,minmax(10rem,auto))_auto]">
           <label className="sr-only" htmlFor="production-search">Search events</label>
           <input
             id="production-search"
@@ -723,22 +905,48 @@ export function PipelineBoard({
             <option value="">All statuses</option>
             {statuses.map((status) => <option key={status} value={status}>{DELIVERABLE_STATUS_META[status]?.label ?? status}</option>)}
           </select>
-          {(filters.q || filters.channel || filters.owner || filters.status) && (
+          {view === "focus" && (
+            <select value={grouping} onChange={(event) => updateFilter("group", event.target.value)} aria-label="Group focused work by" className="min-h-11 rounded-full border px-4 py-2 text-sm">
+              <option value="urgency">Group: urgency + date</option>
+              <option value="channel">Group: channel</option>
+              <option value="work">Group: work type</option>
+            </select>
+          )}
+          {(filters.q || filters.channel || filters.owner || filters.status || grouping !== "urgency") && (
             <button type="button" onClick={clearFilters} className="min-h-11 rounded-full px-4 py-2 text-sm font-semibold text-sky-700 hover:bg-sky-bg">Clear filters</button>
           )}
         </div>
-        <p className="mt-3 text-xs font-medium text-muted">Showing {visible.length}{filtered ? ` of ${items.length}` : ""} current pieces.</p>
+        <p className="mt-3 text-xs font-medium text-muted">
+          {visible.length}{filtered ? ` of ${items.length}` : ""} active pieces match these filters.
+          {view === "focus" ? ` ${focusCurrentCards.length} are shown in this Focus view; older and later work stay in their own views.` : ""}
+        </p>
       </section>
 
       {view === "focus" && (
         <div className="grid gap-4">
-          <ProductionSection title="Proofs needing a decision" description="Approve these or move them back with a clear status change." cards={focus.proof} tone="proof" {...sectionProps} />
-          <ProductionSection title="Ready to schedule" description="The creative work is approved; finish the publishing handoff." cards={focus.ready} tone="ready" {...sectionProps} />
-          <ProductionSection title="Already in progress" description="Keep active work moving before taking on more." cards={focus.inProgress} tone="progress" {...sectionProps} />
-          <ProductionSection title="Recently overdue" description="Still useful, but its make-by date passed within the last two weeks." cards={focus.recentOverdue} tone="overdue" initialEvents={5} {...sectionProps} />
-          <ProductionSection title="Due this week" description="Everything the team still needs to make by Sunday." cards={focus.thisWeek} tone="week" initialEvents={5} {...sectionProps} />
-          <ProductionSection title="Coming next" description="A short look ahead through the next 30 days." cards={focus.nearTerm} tone="upcoming" initialEvents={4} {...sectionProps} />
-          <ProductionSection title="Already scheduled" description="Prepared work with a future placement, kept visible for confidence." cards={focus.scheduled} tone="quiet" initialEvents={3} {...sectionProps} />
+          {grouping === "urgency" ? (
+            <>
+              <ProductionSection title="Proofs needing a decision" description="Approve these or move them back with a clear status change." cards={focus.proof} tone="proof" {...sectionProps} />
+              <ProductionSection title="Ready to schedule" description="The creative work is approved; finish the publishing handoff." cards={focus.ready} tone="ready" {...sectionProps} />
+              <ProductionSection title="Already in progress" description="Keep active work moving before taking on more." cards={focus.inProgress} tone="progress" {...sectionProps} />
+              <ProductionSection title="Recently overdue" description="Still useful, but its make-by date passed within the last two weeks." cards={focus.recentOverdue} tone="overdue" initialEvents={5} {...sectionProps} />
+              <ProductionSection title="Due this week" description="Everything the team still needs to make by Sunday." cards={focus.thisWeek} tone="week" initialEvents={5} {...sectionProps} />
+              <ProductionSection title="Coming next" description="A short look ahead through the next 30 days." cards={focus.nearTerm} tone="upcoming" initialEvents={4} {...sectionProps} />
+              <ProductionSection title="Already scheduled" description="Prepared work with a future placement, kept visible for confidence." cards={focus.scheduled} tone="quiet" initialEvents={3} {...sectionProps} />
+            </>
+          ) : (
+            alternateSections.map((section) => (
+              <ProductionSection
+                key={section.key}
+                title={section.title}
+                description={section.description}
+                cards={section.cards}
+                tone={section.tone}
+                initialEvents={5}
+                {...sectionProps}
+              />
+            ))
+          )}
           {focus.actionTotal === 0 && focus.nearTerm.length === 0 && focus.scheduled.length === 0 && (
             <div className="card-float p-8 text-center"><h2 className="text-lg font-extrabold">No matching work needs attention</h2><p className="mt-1 text-muted">Try clearing a filter or review later work.</p></div>
           )}
@@ -760,13 +968,19 @@ export function PipelineBoard({
       )}
 
       {view === "board" && (
-        <DndContext id="pipeline-board" sensors={sensors} onDragEnd={handleDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-5" aria-label="Production workflow board">
-            {BOARD_COLUMNS.map((status) => (
-              <BoardColumn key={status} status={status} cards={visible.filter((card) => card.status === status)} canEdit={canEdit} users={users} savingIds={savingIds} onMove={moveCard} onAssign={assignOwner} />
-            ))}
-          </div>
-        </DndContext>
+        <div>
+          <p className="mb-3 flex items-center gap-2 rounded-2xl bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-900">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+            Each column starts with 12 pieces to keep the board fast. Load more only where you need it.
+          </p>
+          <DndContext id="pipeline-board" sensors={sensors} onDragEnd={handleDragEnd}>
+            <div className="flex snap-x gap-3 overflow-x-auto pb-5" aria-label="Production workflow board">
+              {BOARD_COLUMNS.map((status) => (
+                <BoardColumn key={status} status={status} cards={visible.filter((card) => card.status === status)} canEdit={canEdit} users={users} savingIds={savingIds} onMove={moveCard} onAssign={assignOwner} />
+              ))}
+            </div>
+          </DndContext>
+        </div>
       )}
 
       <p className="mt-5 text-center text-xs text-muted">Signed in as the current team member · personal assignments are in <Link href="/my-tasks" className="font-semibold text-sky-700 hover:underline">My Tasks</Link>.</p>

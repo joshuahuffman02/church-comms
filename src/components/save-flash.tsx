@@ -15,12 +15,10 @@ export function useSaveFlash() {
 }
 
 export function SavedTick({ show }: { show: boolean }) {
+  if (!show) return null;
   return (
     <span
-      aria-hidden={!show}
-      className={`whitespace-nowrap text-xs font-bold text-emerald-600 transition-opacity duration-300 ${
-        show ? "opacity-100" : "opacity-0"
-      }`}
+      className="whitespace-nowrap text-xs font-bold text-emerald-600"
     >
       ✓ Saved
     </span>

@@ -48,7 +48,16 @@ export const DELIVERABLE_STATUS_META: Record<string, { label: string; color: str
   ready:       { label: "Ready to use", color: "#34d399" },
   scheduled:   { label: "Scheduled",   color: "#38bdf8" },
   published:   { label: "Complete",    color: "#10b981" },
-  skipped:     { label: "Skipped",     color: "#cbd5e1" },
+  skipped:     { label: "Not needed",  color: "#cbd5e1" },
+};
+export const DELIVERABLE_STATUS_HELP: Record<string, string> = {
+  to_design: "The work has not begun yet",
+  in_progress: "Someone is actively making it",
+  proof: "Copy or creative needs a decision",
+  ready: "Approved and ready to schedule or publish",
+  scheduled: "Placed in the channel and waiting to go live",
+  published: "Published, used, or otherwise finished",
+  skipped: "Intentionally not needed for this event",
 };
 // linear non-skipped progression for the "advance" toggle:
 export const DELIVERABLE_FLOW = ["to_design","in_progress","ready","published"] as const;
