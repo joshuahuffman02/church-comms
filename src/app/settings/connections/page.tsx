@@ -10,14 +10,14 @@ import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form
 
 export const dynamic = "force-dynamic";
 
-function StatusPill({ ok }: { ok: boolean }) {
+function StatusPill({ ok, label }: { ok: boolean; label?: string }) {
   return (
     <span
       className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
         ok ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-muted"
       }`}
     >
-      {ok ? "Connected" : "Not connected"}
+      {label ?? (ok ? "Connected" : "Not connected")}
     </span>
   );
 }
@@ -32,7 +32,6 @@ export default async function ConnectionsSettings() {
   const calendar = await activeExternalCalendarConfig();
   const google = !!calendar.feedUrl;
   const email = !!process.env.SMTP_HOST;
-  const ical = !!process.env.ICAL_IMPORT_FILE;
 
   return (
     <div className="max-w-3xl">
@@ -56,7 +55,7 @@ export default async function ConnectionsSettings() {
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {pco && <PcoTestButton />}
           <Link
-            href="/import/planning-center"
+            href="/imports?source=planning-center"
             className="text-sm font-semibold text-sky-600 hover:underline"
           >
             Go to import →
@@ -103,11 +102,15 @@ export default async function ConnectionsSettings() {
           checklist (read-only — a casual front door, not the source of truth).
         </p>
         <div className="mt-4">
-          <ExternalCalendarUrlForm currentUrl={calendar.sourceUrl} buttonLabel={google ? "Update URL" : "Connect calendar"} />
+          <ExternalCalendarUrlForm
+            configured={google}
+            canClear={calendar.source === "setting"}
+            buttonLabel={google ? "Save replacement" : "Connect calendar"}
+          />
         </div>
         <div className="mt-3">
-          <Link href="/import/google" className="text-sm font-semibold text-sky-600 hover:underline">
-            Go to import →
+          <Link href="/imports?source=google" className="text-sm font-semibold text-sky-600 hover:underline">
+            Open review inbox →
           </Link>
         </div>
         <details className="mt-3 rounded-2xl border bg-sky-bg/40 px-4 py-3 text-sm">
@@ -152,14 +155,14 @@ export default async function ConnectionsSettings() {
       <div className="card-float p-5">
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-bold">📥 Calendar file (.ics)</h2>
-          <StatusPill ok={ical} />
+          <StatusPill ok label="Ready" />
         </div>
         <p className="text-muted mt-1 text-sm">
-          An optional one-off way to bring events in from a calendar export.
+          Upload a one-off calendar export without saving it or changing a connection.
         </p>
         <div className="mt-3">
-          <Link href="/import/ical" className="text-sm font-semibold text-sky-600 hover:underline">
-            Go to calendar import →
+          <Link href="/imports?source=ical" className="text-sm font-semibold text-sky-600 hover:underline">
+            Upload a calendar file →
           </Link>
         </div>
       </div>

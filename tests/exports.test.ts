@@ -4,10 +4,13 @@ import {
   buildBulletinCopy,
   buildVideoRunOfShow,
   buildVideoScript,
+  buildChannelHandoff,
+  exportSundayFromParam,
   type LoopItem,
   type BulletinItem,
   type VideoItem,
   type VideoScriptItem,
+  type ChannelHandoffItem,
 } from "../src/lib/exports";
 import { atMidnight } from "../src/lib/engine/dates";
 
@@ -68,6 +71,23 @@ describe("buildLoopList", () => {
     );
     const slide = out.split("\n").filter(Boolean)[1];
     expect(slide).toBe("1. line one line two");
+  });
+});
+
+describe("exportSundayFromParam", () => {
+  it("uses the selected Sunday when the query is valid", () => {
+    const selected = exportSundayFromParam("2026-08-02", new Date(2026, 6, 22));
+    expect(selected.getFullYear()).toBe(2026);
+    expect(selected.getMonth()).toBe(7);
+    expect(selected.getDate()).toBe(2);
+  });
+
+  it("normalizes a weekday to its coming Sunday", () => {
+    expect(exportSundayFromParam("2026-07-29", new Date(2026, 6, 22)).getDate()).toBe(2);
+  });
+
+  it("falls back safely when the query is invalid", () => {
+    expect(exportSundayFromParam("not-a-date", new Date(2026, 6, 22)).getDate()).toBe(26);
   });
 });
 
@@ -145,5 +165,41 @@ describe("buildVideoScript", () => {
     expect(out).toContain("Bring a dish to share!"); // per-touch content wins
     expect(out).not.toContain("Fourth item"); // capped at 3
     expect(out.split("\n")[0]).toMatch(/^Announcement Video Script — Sunday /);
+  });
+});
+
+describe("buildChannelHandoff", () => {
+  const items: ChannelHandoffItem[] = [
+    {
+      title: "Family Movie Night",
+      scheduledAt: atMidnight(new Date("2026-07-22")),
+      content: "Join us outside for a family movie.",
+      description: "Fallback description",
+      nextStepText: "Bring a lawn chair",
+      assetLink: "https://example.com/movie-art",
+      note: "Post after lunch",
+      purposeLabel: "Registration open",
+    },
+  ];
+
+  it("names the channel and export week", () => {
+    const out = buildChannelHandoff("Facebook", items, atMidnight(new Date("2026-07-26")));
+    expect(out.split("\n")[0]).toMatch(/^Facebook — Week ending Sunday /);
+    expect(out.split("\n")[0]).toContain("2026");
+  });
+
+  it("keeps each dated placement and prefers its custom copy", () => {
+    const out = buildChannelHandoff("Facebook", items, atMidnight(new Date("2026-07-26")));
+    expect(out).toContain("Wed, Jul 22 · Family Movie Night");
+    expect(out).toContain("Join us outside for a family movie.");
+    expect(out).not.toContain("Fallback description");
+    expect(out).toContain("Next step: Bring a lawn chair");
+    expect(out).toContain("Asset: https://example.com/movie-art");
+    expect(out).toContain("Note: Post after lunch");
+  });
+
+  it("returns a useful header when a channel has no scheduled work", () => {
+    expect(buildChannelHandoff("Church App", [], atMidnight(new Date("2026-07-26"))))
+      .toMatch(/^Church App — Week ending Sunday /);
   });
 });

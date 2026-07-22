@@ -334,7 +334,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
                 + Add output
               </Link>
               <ReplanButton id={request.id} />
-              <EventActions id={request.id} status={request.status} />
+              <EventActions id={request.id} status={request.status} eventTitle={request.title} />
             </div>
           )}
         </div>
@@ -384,17 +384,23 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
           )}
         </div>
 
-        {/* Owner: who's driving this event's comms. */}
-        <div className="mt-3 flex items-center gap-2 text-sm">
-          <span className="text-muted">👤 Owner:</span>
-          <span className="font-semibold">{request.owner?.name ?? "Unassigned"}</span>
+        {/* Overall owner coordinates the event; individual outputs can override below. */}
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-100 px-4 py-3 text-sm">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-ink">👤 Overall event owner</p>
+            <p className="mt-0.5 text-xs text-muted">
+              Coordinates the whole communication plan. Individual pieces below can be assigned to someone else.
+            </p>
+          </div>
           {canEdit && (
             <OwnerAssign
               requestId={request.id}
               ownerId={request.ownerId}
               users={activeUsers}
+              eventTitle={request.title}
             />
           )}
+          {!canEdit && <span className="font-semibold">{request.owner?.name ?? "No overall owner"}</span>}
         </div>
 
         {/* Planning Center link state (Model C). When linked to a PCO event we
@@ -549,7 +555,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       )}
 
       {/* Status pipeline + actions */}
-      <StatusPipeline id={request.id} status={request.status} canEdit={canEdit} />
+      <StatusPipeline id={request.id} status={request.status} eventTitle={request.title} canEdit={canEdit} />
 
       {/* Approvals */}
       {approvals.length > 0 && (
@@ -623,7 +629,13 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       )}
 
       {/* Deliverables */}
-      <DeliverableList rows={rows} users={activeUsers} currentUserId={me?.id ?? ""} canEdit={canEdit} />
+      <DeliverableList
+        rows={rows}
+        users={activeUsers}
+        currentUserId={me?.id ?? ""}
+        eventTitle={request.title}
+        canEdit={canEdit}
+      />
 
       {/* Assets / finished art */}
       <AssetAttach requestId={request.id} assets={assetRows} canEdit={canEdit} />

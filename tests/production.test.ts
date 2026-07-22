@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { focusProductionItems, type ProductionFocusItem } from "../src/lib/production";
+import {
+  focusProductionItems,
+  productionWorkBrief,
+  type ProductionFocusItem,
+} from "../src/lib/production";
 import { addDays, atMidnight } from "../src/lib/engine/dates";
 
 describe("focusProductionItems", () => {
@@ -60,5 +64,25 @@ describe("focusProductionItems", () => {
 
     expect(result.actionTotal).toBe(3);
     expect(result.unassignedActionTotal).toBe(2);
+  });
+});
+
+describe("productionWorkBrief", () => {
+  it("distinguishes writing, graphics, and video work", () => {
+    expect(productionWorkBrief("facebook", "Facebook", "to_design").kind).toBe("writing");
+    expect(productionWorkBrief("loop", "Sunday Loop", "to_design").kind).toBe("graphics");
+    expect(productionWorkBrief("announcement_video", "Announcement Video", "to_design").kind).toBe("video");
+  });
+
+  it("turns approved creative into scheduling and publishing work", () => {
+    const brief = productionWorkBrief("loop", "Sunday Loop", "ready");
+    expect(brief.kind).toBe("publishing");
+    expect(brief.nextAction).toContain("Schedule or publish");
+  });
+
+  it("explains proof review without losing the underlying work type", () => {
+    const brief = productionWorkBrief("announcement_video", "Announcement Video", "proof");
+    expect(brief.kind).toBe("video");
+    expect(brief.nextAction).toContain("Review");
   });
 });

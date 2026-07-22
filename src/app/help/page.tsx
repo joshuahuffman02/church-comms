@@ -146,9 +146,15 @@ export default async function Help() {
           Submitted → Triaged → Approved → In Production → Proof → Scheduled →
           Published
         </p>
-        <p>Each piece to make (one asset for one channel) moves through:</p>
+        <p>
+          Each piece to make—such as a Facebook post, loop slide, email item, or
+          video segment—has its own owner and moves through:
+        </p>
         <p className="text-sm font-semibold text-muted">
-          To design → In progress → Ready → Published
+          Not started → In progress → Needs review → Ready to use → Scheduled → Complete
+        </p>
+        <p className="text-sm text-muted">
+          Cancel stops the whole event. Skip stops only one piece and can be reversed from the event page.
         </p>
       </Card>
 

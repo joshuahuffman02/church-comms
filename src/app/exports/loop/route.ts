@@ -1,10 +1,11 @@
-import { buildLoopList, loadLoopForComingSunday, ymd } from "@/lib/exports";
+import { buildLoopList, exportSundayFromParam, loadLoopForComingSunday, ymd } from "@/lib/exports";
 
 // Reads live DB data per request — never statically cached.
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const { sunday, items } = await loadLoopForComingSunday(new Date());
+export async function GET(request: Request) {
+  const anchor = exportSundayFromParam(new URL(request.url).searchParams.get("sunday"), new Date());
+  const { sunday, items } = await loadLoopForComingSunday(anchor);
   const text = buildLoopList(items, sunday);
   return new Response(text, {
     headers: {

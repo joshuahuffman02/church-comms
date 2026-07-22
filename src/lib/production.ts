@@ -7,6 +7,61 @@ export type ProductionFocusItem = {
   ownerId: string | null;
 };
 
+export type ProductionWorkKind = "writing" | "graphics" | "video" | "publishing";
+
+export type ProductionWorkBrief = {
+  kind: ProductionWorkKind;
+  label: string;
+  nextAction: string;
+};
+
+const WORK_KIND_LABEL: Record<ProductionWorkKind, string> = {
+  writing: "Writing",
+  graphics: "Graphics",
+  video: "Video",
+  publishing: "Scheduling / publishing",
+};
+
+/**
+ * Turn a channel into the kind of work a teammate is actually doing. The
+ * status can temporarily change that kind: once creative is approved, the
+ * active job is scheduling/publishing regardless of how the piece was made.
+ */
+export function productionWorkBrief(
+  channelKey: string,
+  channelName: string,
+  status: string,
+): ProductionWorkBrief {
+  const normalized = `${channelKey} ${channelName}`.toLowerCase();
+  let kind: ProductionWorkKind;
+
+  if (status === "ready" || status === "scheduled") kind = "publishing";
+  else if (normalized.includes("video")) kind = "video";
+  else if (
+    /loop|graphic|slide|sign|banner|bulletin|insert|display|opportunit|print/.test(normalized)
+  ) kind = "graphics";
+  else kind = "writing";
+
+  const startAction: Record<ProductionWorkKind, string> = {
+    writing: "Write the channel-ready copy",
+    graphics: "Design the visual and prepare the final file",
+    video: "Write, record, and finish the video segment",
+    publishing: "Schedule or publish it in the channel",
+  };
+
+  const nextAction = (() => {
+    if (status === "proof") return "Review the piece and approve it or send it back";
+    if (status === "ready") return "Schedule or publish it in the channel";
+    if (status === "scheduled") return "Confirm the placement goes live as planned";
+    if (status === "published") return "Finished and live";
+    if (status === "skipped") return "Not needed for this event";
+    if (status === "in_progress") return `Finish it: ${startAction[kind].toLowerCase()}`;
+    return startAction[kind];
+  })();
+
+  return { kind, label: WORK_KIND_LABEL[kind], nextAction };
+}
+
 export type ProductionFocus<T extends ProductionFocusItem> = {
   proof: T[];
   ready: T[];

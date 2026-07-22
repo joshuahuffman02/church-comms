@@ -167,7 +167,7 @@ function EventRow({ row, todayMs, duplicate = false }: { row: RequestRow; todayM
         <div className="shrink-0 text-right text-xs text-muted">
           <p>{row.plannedChannelCount} {row.plannedChannelCount === 1 ? "channel" : "channels"} planned</p>
           <p className={row.ownerName ? "mt-1" : "mt-1 font-semibold text-amber-800"}>
-            {row.ownerName ? `Owner: ${row.ownerName}` : "Owner unassigned"}
+            {row.ownerName ? `Event owner: ${row.ownerName}` : "Event owner unassigned"}
           </p>
           <p className="mt-2 font-semibold text-sky-700">Open event →</p>
         </div>
@@ -548,7 +548,7 @@ export function RequestsTable({ rows, initialFilters = DEFAULT_FILTERS, canEdit 
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
-            <Link href="/import/planning-center" className="inline-flex min-h-11 items-center rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-semibold text-ink hover:bg-white">Import events</Link>
+            <Link href="/imports?source=planning-center" className="inline-flex min-h-11 items-center rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-semibold text-ink hover:bg-white">Import events</Link>
             <Link href="/requests/new" className="btn-primary inline-flex min-h-11 items-center rounded-full px-5 py-2 text-sm font-semibold">Add event</Link>
           </div>
         )}

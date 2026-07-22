@@ -1,15 +1,17 @@
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, CalendarPlus, Zap } from "lucide-react";
 import { db } from "@/lib/db";
 import { getSessionUser } from "@/lib/authz";
 import { isEditor } from "@/lib/roles";
-import { createQuickItem } from "@/actions/quick-items";
 import { AccessRequiredCard } from "@/components/access-required-card";
+import {
+  QuickItemForm,
+  type QuickDateShortcut,
+} from "@/components/quick-item-form";
+import { addDays, atMidnight } from "@/lib/engine/dates";
+import { comingSunday } from "@/lib/week";
+import { ymd } from "@/lib/exports";
 
-/**
- * "Quick Item" creation page — for standalone channel tasks that aren't a full
- * event. Auth-gated server component posting to the createQuickItem action and
- * redirecting to /outputs on success.
- */
 export default async function NewQuickItem() {
   const me = await getSessionUser();
   if (!me || !isEditor(me.roles)) {
@@ -21,65 +23,92 @@ export default async function NewQuickItem() {
     );
   }
 
-  const channels = await db.channel.findMany({
-    where: { active: true },
-    orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true },
-  });
+  const [channels, owners] = await Promise.all([
+    db.channel.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        color: true,
+        productionLeadDays: true,
+        productionNotes: true,
+      },
+    }),
+    db.user.findMany({
+      where: { active: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+  ]);
 
-  async function submit(fd: FormData) {
-    "use server";
-    await createQuickItem(fd);
-    redirect("/outputs");
-  }
+  const today = atMidnight(new Date());
+  const shortcuts: QuickDateShortcut[] = [
+    { label: "Today", value: ymd(today) },
+    { label: "Tomorrow", value: ymd(addDays(today, 1)) },
+    { label: "This Sunday", value: ymd(comingSunday(today)) },
+  ].filter(
+    (shortcut, index, all) =>
+      all.findIndex((candidate) => candidate.value === shortcut.value) === index,
+  );
 
   return (
-    <form action={submit} className="card-float p-6 max-w-xl grid gap-3">
-      <h1 className="text-2xl font-extrabold">Quick post ⚡</h1>
-      <p className="text-sm text-muted">
-        For standalone things that aren&apos;t a full event — e.g. &ldquo;Website:
-        bold Easter service times&rdquo;, or &ldquo;App push: parking
-        reminder&rdquo;. It shows up on the chosen channel for that week.
-      </p>
+    <div className="mx-auto max-w-6xl">
+      <Link
+        href="/outputs"
+        className="mb-4 inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-muted hover:text-ink"
+      >
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        All channels
+      </Link>
 
-      <label className="text-sm text-muted">What needs to happen?</label>
-      <input
-        name="title"
-        required
-        placeholder="e.g. Website: bold Easter service times on the homepage"
-        className="rounded-2xl border px-4 py-2"
-      />
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="mb-1 inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-[0.16em] text-violet-700">
+            <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+            One channel · one date
+          </p>
+          <h1 className="text-3xl font-extrabold text-ink">Quick post</h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">
+            Add a standalone communication job without creating a full event. You’ll
+            choose the exact work, owner, and date before anything is saved.
+          </p>
+        </div>
+        <Link
+          href="/requests/new"
+          className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-ink hover:border-sky-300 hover:bg-sky-50"
+        >
+          <CalendarPlus className="h-4 w-4 text-sky-700" aria-hidden="true" />
+          This is an event instead
+        </Link>
+      </header>
 
-      <label className="text-sm text-muted">Which channel?</label>
-      <select name="channelId" required className="rounded-2xl border px-4 py-2">
-        {channels.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </select>
+      <div className="mb-5 rounded-2xl border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-950">
+        <b>Use Quick Post for:</b> a website correction, one social post, an app
+        notice, a one-off slide, or another single-channel task. If it has an event
+        date, registration, or needs several channels, create an event instead.
+      </div>
 
-      <label className="text-sm text-muted">When (the day it should be live)</label>
-      <input name="date" type="date" required className="rounded-2xl border px-4 py-2" />
-
-      <label className="text-sm text-muted">Asset link (optional)</label>
-      <input
-        name="assetLink"
-        type="url"
-        placeholder="https://… (Canva, Drive, etc.)"
-        className="rounded-2xl border px-4 py-2"
-      />
-
-      <label className="text-sm text-muted">Note (optional)</label>
-      <textarea
-        name="note"
-        placeholder="Anything the designer/publisher should know"
-        className="rounded-2xl border px-4 py-2"
-      />
-
-      <button className="rounded-full bg-ink text-white py-2 font-semibold">
-        Add quick item →
-      </button>
-    </form>
+      {channels.length === 0 ? (
+        <section className="card-float p-6">
+          <h2 className="font-extrabold text-ink">No active channels are available</h2>
+          <p className="mt-1 text-sm text-muted">
+            An administrator needs to activate or create a channel before a quick
+            communication can be added.
+          </p>
+          <Link href="/settings/channels" className="mt-3 inline-flex font-bold text-sky-700 hover:underline">
+            Open channel settings →
+          </Link>
+        </section>
+      ) : (
+        <QuickItemForm
+          channels={channels}
+          owners={owners}
+          currentUserId={me.id}
+          todayKey={ymd(today)}
+          dateShortcuts={shortcuts}
+        />
+      )}
+    </div>
   );
 }

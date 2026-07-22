@@ -14,7 +14,7 @@ export function CalendarImportToastClient({ pendingCount }: { pendingCount: numb
   );
   const dismissed = dismissedKey === storageKey;
 
-  if (dismissed || pathname.startsWith("/import/google")) return null;
+  if (dismissed || pathname.startsWith("/imports")) return null;
 
   function dismiss() {
     window.sessionStorage.setItem(storageKey, "dismissed");
@@ -33,7 +33,7 @@ export function CalendarImportToastClient({ pendingCount }: { pendingCount: numb
           <p className="mt-1 text-sm text-muted">
             {pendingCount} item{pendingCount === 1 ? "" : "s"} waiting for accept or ignore.
           </p>
-          <Link href="/import/google" className="mt-3 inline-block text-sm font-semibold text-sky-700 underline">
+          <Link href="/imports?source=google" className="mt-3 inline-block text-sm font-semibold text-sky-700 underline">
             Review calendar inbox
           </Link>
         </div>

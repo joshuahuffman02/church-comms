@@ -4,10 +4,12 @@ import { StatusActions } from "@/components/status-actions";
 export function StatusPipeline({
   id,
   status,
+  eventTitle,
   canEdit = true,
 }: {
   id: string;
   status: string;
+  eventTitle: string;
   canEdit?: boolean;
 }) {
   const currentIndex = REQUEST_STATUSES.indexOf(status as (typeof REQUEST_STATUSES)[number]);
@@ -64,7 +66,7 @@ export function StatusPipeline({
         })}
       </div>
 
-      {canEdit && <StatusActions id={id} status={status} />}
+      {canEdit && <StatusActions id={id} status={status} eventTitle={eventTitle} />}
     </div>
   );
 }

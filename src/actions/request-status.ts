@@ -98,21 +98,39 @@ export async function advanceRequestStatus(id: string) {
   if (next) await setRequestStatus(id, next);
 }
 
-export async function setDeliverableStatus(deliverableId: string, status: string) {
+export async function setDeliverableStatus(
+  deliverableId: string,
+  status: string,
+  skippedReason?: string,
+) {
   const user = await requireEditor();
   if (!VALID_DELIVERABLE_STATUSES.has(status)) throw new Error("Invalid status");
+  const normalizedSkipReason = status === "skipped"
+    ? skippedReason?.trim().slice(0, 500) || "Not needed for this event"
+    : null;
   const before = await db.deliverable.findUnique({
     where: { id: deliverableId },
-    select: { status: true, channel: { select: { name: true } }, requestId: true },
+    select: { status: true, skippedReason: true, channel: { select: { name: true } }, requestId: true },
   });
   if (!before) throw new Error("Deliverable not found");
-  const d = await db.deliverable.update({ where: { id: deliverableId }, data: { status }, select: { requestId: true } });
+  const d = await db.deliverable.update({
+    where: { id: deliverableId },
+    data: { status, skippedReason: normalizedSkipReason },
+    select: { requestId: true },
+  });
   await logRequestActivity(
     {
       requestId: d.requestId,
       action: "deliverable_status_changed",
       summary: `${before.channel.name} changed from ${before.status} to ${status}`,
-      metadata: { deliverableId, channelName: before.channel.name, fromStatus: before.status, toStatus: status },
+      metadata: {
+        deliverableId,
+        channelName: before.channel.name,
+        fromStatus: before.status,
+        toStatus: status,
+        skippedReason: normalizedSkipReason,
+        previousSkippedReason: before.skippedReason,
+      },
     },
     user,
   );

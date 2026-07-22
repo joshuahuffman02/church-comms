@@ -15,6 +15,8 @@ function revalidateChannelSurfaces() {
   revalidatePath("/calendar");
   revalidatePath("/guardrails");
   revalidatePath("/assign");
+  revalidatePath("/exports");
+  revalidatePath("/pipeline");
 }
 
 export interface ChannelActionState {
@@ -82,11 +84,14 @@ export async function updateChannel(
  *   Windowed channels default to [0] (Sunday) when none are picked.
  * - `sortOrder` is appended after the current max.
  */
-export async function createChannel(fd: FormData) {
+export async function createChannel(
+  _prev: ChannelActionState,
+  fd: FormData,
+): Promise<ChannelActionState> {
   await requireAdmin();
 
   const name = String(fd.get("name") ?? "").trim();
-  if (!name) throw new Error("Name is required");
+  if (!name) return { ok: false, error: "Give the channel a name." };
 
   const typeRaw = String(fd.get("type") ?? "windowed");
   const type = CHANNEL_TYPES.has(typeRaw) ? typeRaw : "windowed";
@@ -111,28 +116,44 @@ export async function createChannel(fd: FormData) {
 
   const capacityRaw = String(fd.get("capacity") ?? "").trim();
   const capacity = capacityRaw ? Number(capacityRaw) : null;
+  const offset = Number(fd.get("offset") ?? 14);
+  const lead = Number(fd.get("lead") ?? 7);
+  if (!Number.isFinite(offset) || offset < 0) {
+    return { ok: false, error: "Promotion timing must be zero days or more." };
+  }
+  if (!Number.isFinite(lead) || lead < 0) {
+    return { ok: false, error: "Production lead time must be zero days or more." };
+  }
+  if (capacity != null && (!Number.isInteger(capacity) || capacity < 1)) {
+    return { ok: false, error: "Capacity must be a whole number greater than zero, or left blank." };
+  }
 
   const key = await uniqueKey(slugify(name));
   const max = await db.channel.aggregate({ _max: { sortOrder: true } });
   const sortOrder = (max._max.sortOrder ?? 0) + 1;
 
-  await db.channel.create({
-    data: {
-      key,
-      name,
-      type,
-      defaultPublishOffsetDays: Number(fd.get("offset") ?? 14),
-      productionLeadDays: Number(fd.get("lead") ?? 7),
-      capacity,
-      cadence: cadence ?? undefined,
-      tierEligibility,
-      color: String(fd.get("color") || "#93c5fd"),
-      sortOrder,
-    },
-  });
+  try {
+    await db.channel.create({
+      data: {
+        key,
+        name,
+        type,
+        defaultPublishOffsetDays: offset,
+        productionLeadDays: lead,
+        capacity,
+        cadence: cadence ?? undefined,
+        tierEligibility,
+        color: String(fd.get("color") || "#93c5fd"),
+        sortOrder,
+      },
+    });
+  } catch {
+    return { ok: false, error: "Couldn’t add the channel. Check the details and try again." };
+  }
 
   await replanUpcomingPromotableRequests();
   revalidateChannelSurfaces();
+  return { ok: true, savedAt: Date.now() };
 }
 
 /**

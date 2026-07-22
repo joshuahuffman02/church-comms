@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useState } from "react";
+import { AlertTriangle, CalendarClock, ChevronDown, RotateCcw, Save } from "lucide-react";
 import { updateChannel, type ChannelActionState } from "@/actions/channels";
 import { useSaveFlash, SavedTick } from "@/components/save-flash";
 import { ChannelDeleteButton } from "@/components/channel-delete-button";
@@ -80,6 +81,35 @@ export function ChannelRow({
 
   const dirty = snapshot() !== baseline;
 
+  function resetChanges() {
+    const saved = JSON.parse(baseline) as {
+      name: string;
+      type: string;
+      active: boolean;
+      color: string;
+      offset: string;
+      lead: string;
+      weekdays: number[];
+      cap: string;
+      capacity: string;
+      lockLead: string;
+      tiers: number[];
+      notes: string;
+    };
+    setName(saved.name);
+    setType(saved.type);
+    setActive(saved.active);
+    setColor(saved.color);
+    setOffset(saved.offset);
+    setLead(saved.lead);
+    setWeekdays(saved.weekdays);
+    setCap(saved.cap);
+    setCapacity(saved.capacity);
+    setLockLead(saved.lockLead);
+    setTiers(saved.tiers);
+    setNotes(saved.notes);
+  }
+
   const event = parseDateInput(exampleEventKey) ?? atMidnight(new Date());
   const preview = previewSchedule(
     { type, offset: num(offset), lead: num(lead), lockLeadDays: lockLead.trim() === "" ? null : num(lockLead), weekdays },
@@ -100,28 +130,44 @@ export function ChannelRow({
     : "Start promoting";
 
   return (
-    <div className={`card-float mb-3 overflow-hidden ${open ? "ring-2 ring-sky-200" : ""}`}>
+    <div className={`card-float overflow-hidden ${open ? "ring-2 ring-sky-200" : ""} ${!channel.active && !open ? "bg-white/65" : ""}`}>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        className="flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left sm:px-5"
       >
-        <span className="h-3 w-3 flex-none rounded-full" style={{ background: channel.color }} />
-        <span className="font-semibold text-ink">{name}</span>
-        <span className="hidden flex-1 text-xs text-muted sm:block">{summary}</span>
-        <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+        <span className="h-3.5 w-3.5 flex-none rounded-full ring-4 ring-white" style={{ background: color }} />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-bold text-ink">{name}</span>
+            <span className="hidden rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 md:inline-flex">{TYPE_LABELS[type] ?? type}</span>
+            {dirty && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">Unsaved</span>}
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-muted">{summary}</span>
+        </span>
+        <span className={`ml-auto shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
           active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-muted"
-        }`}>{active ? "On" : "Off"}</span>
-        <span className="text-muted">{open ? "▾" : "▸"}</span>
+        }`}>{active ? "Active" : "Paused"}</span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted transition ${open ? "rotate-180" : ""}`} aria-hidden="true" />
       </button>
 
       {open && (
-        <form action={formAction} className="border-t border-slate-100 px-4 py-4">
+        <form action={formAction} className="border-t border-slate-100 bg-white/45 px-4 py-5 sm:px-5">
           <input type="hidden" name="id" value={channel.id} />
 
+          <div className="mb-5 flex flex-col gap-2 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-extrabold text-ink">Editing {name}</p>
+              <p className="mt-0.5 text-xs text-muted">Nothing changes in the live schedule until you save.</p>
+            </div>
+            <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-bold ${dirty ? "bg-amber-100 text-amber-800" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>
+              {dirty ? "Unsaved changes" : "Up to date"}
+            </span>
+          </div>
+
           <section className="mb-5">
-            <h3 className="mb-1 text-sm font-bold text-ink">What this channel is</h3>
+            <h3 className="mb-1 text-sm font-bold text-ink">Channel identity</h3>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted">
               <label className="grid gap-1">
                 <span className="font-semibold">Name</span>
@@ -140,11 +186,27 @@ export function ChannelRow({
                 <input type="color" name="color" value={color} onChange={(e) => setColor(e.target.value)}
                   className="h-9 w-12 rounded border align-middle" />
               </label>
-              <label className="mt-5 flex items-center gap-2">
-                <input type="checkbox" name="active" checked={active} onChange={(e) => setActive(e.target.checked)} />
-                <span className="font-semibold">Active</span>
-              </label>
             </div>
+            <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+              <input type="checkbox" name="active" checked={active} onChange={(e) => setActive(e.target.checked)} className="mt-0.5 h-5 w-5 accent-sky-600" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold text-ink">Use this channel in the live workflow</span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted">Active channels create future placements and appear in Channel Plan, weekly handoffs, and Downloads.</span>
+              </span>
+              <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${active ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-700"}`}>{active ? "Active" : "Paused"}</span>
+            </label>
+            {channel.active && !active && (
+              <div className="mt-3 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <p><b>Saving will pause this channel.</b> Its future placements will be removed when the schedule rebuilds; past history stays intact.</p>
+              </div>
+            )}
+            {!channel.active && active && (
+              <div className="mt-3 flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+                <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                <p><b>Saving will activate this channel.</b> Eligible upcoming events will be backfilled automatically.</p>
+              </div>
+            )}
           </section>
 
           <section className="mb-5">
@@ -187,7 +249,7 @@ export function ChannelRow({
             </div>
           </section>
 
-          {type !== "one_shot" && (
+          {(type === "windowed" || type === "single_weekday") && (
             <section className="mb-5">
               <h3 className="mb-1 text-sm font-bold text-ink">Posting</h3>
               <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-muted">
@@ -252,18 +314,32 @@ export function ChannelRow({
           </details>
 
           {state.error && (
-            <div className="mb-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{state.error}</div>
+            <div role="alert" className="mb-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700">{state.error}</div>
           )}
 
-          <div className="flex items-center gap-3">
-            <button type="submit" disabled={!dirty || pending}
-              className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-              {pending ? "Saving…" : "Save changes"}
-            </button>
+          <div className={`rounded-2xl border px-4 py-4 ${dirty ? "border-amber-200 bg-amber-50/80" : "border-slate-200 bg-white"}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div aria-live="polite">
+                <p className="text-sm font-bold text-ink">{dirty ? "Ready to update the schedule" : "No unsaved changes"}</p>
+                <p className="mt-0.5 text-xs text-muted">Saving recalculates future placements automatically. Past dates are not rewritten.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={resetChanges} disabled={!dirty || pending}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-slate-300 px-4 py-2 text-sm font-bold text-ink hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" /> Cancel changes
+                </button>
+                <button type="submit" disabled={!dirty || pending}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+                  <Save className="h-4 w-4" aria-hidden="true" /> {pending ? "Saving and rebuilding…" : "Save and update schedule"}
+                </button>
+              </div>
+            </div>
             <SavedTick show={flash} />
-            <span className="ml-auto"><ChannelDeleteButton id={channel.id} /></span>
           </div>
-          {!dirty && !flash && <p className="mt-2 text-xs text-muted">Save lights up when you change something.</p>}
+
+          <div className="mt-4 flex justify-end border-t border-slate-100 pt-4">
+            <ChannelDeleteButton id={channel.id} />
+          </div>
         </form>
       )}
     </div>

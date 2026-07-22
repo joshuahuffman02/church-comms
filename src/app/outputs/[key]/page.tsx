@@ -70,6 +70,11 @@ const SOURCE_META: Record<AnnouncementLineupSource, { label: string; className: 
 };
 
 type EventOption = { id: string; label: string };
+type OutputSearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 function StatusChip({ status }: { status: string }) {
   const meta = DELIVERABLE_STATUS_META[status] ?? { label: status, color: "#94a3b8" };
@@ -471,10 +476,14 @@ export default async function OutputPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<OutputSearchParams>;
 }) {
   const [{ key }, query] = await Promise.all([params, searchParams]);
-  const focusedWeek = /^\d{4}-\d{2}-\d{2}$/.test(query.week ?? "") ? query.week! : null;
+  const requestedWeek = firstParam(query.week);
+  const focusedWeek = /^\d{4}-\d{2}-\d{2}$/.test(requestedWeek) ? requestedWeek : null;
+  const createdRequestId = /^[a-z0-9_-]{8,}$/i.test(firstParam(query.created))
+    ? firstParam(query.created)
+    : null;
   const [channel, user] = await Promise.all([
     db.channel.findUnique({ where: { key } }),
     getSessionUser(),
@@ -583,6 +592,23 @@ export default async function OutputPage({
   return (
     <div className="mx-auto max-w-6xl">
       <Link href="/outputs" className="inline-flex min-h-11 items-center text-sm font-semibold text-muted hover:underline">← All channels</Link>
+
+      {createdRequestId && (
+        <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+          <div>
+            <p className="font-extrabold">Quick post created</p>
+            <p className="text-emerald-900/75">
+              It is now a Not started piece in {channel.name}. You can edit its content below.
+            </p>
+          </div>
+          <Link
+            href={`/requests/${createdRequestId}`}
+            className="rounded-xl border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-900 hover:bg-emerald-100"
+          >
+            Open full details →
+          </Link>
+        </div>
+      )}
 
       <header className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,26rem)] lg:items-start">
         <div>

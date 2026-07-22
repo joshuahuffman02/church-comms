@@ -34,6 +34,7 @@ async function selectedGoogleEvents(keys: readonly string[]): Promise<ExternalCa
 }
 
 function refreshImportSurfaces() {
+  revalidatePath("/imports");
   revalidatePath("/import/google");
   revalidatePath("/requests");
   revalidatePath("/calendar");

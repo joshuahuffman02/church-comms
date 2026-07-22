@@ -10,6 +10,7 @@ import { atMidnight } from "@/lib/engine/dates";
 import { isEditor } from "@/lib/roles";
 import { DeliverableStatusButton } from "@/components/deliverable-status-button";
 import { ProofActions } from "@/components/proof-actions";
+import { channelWorkLabel } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -100,12 +101,13 @@ function firstEventGroups(rows: MyTask[], limit: number): MyTask[] {
 
 function TaskRow({ task, today, canEdit }: { task: MyTask; today: Date; canEdit: boolean }) {
   const due = dueLabel(task.productionDueAt, today);
+  const workLabel = channelWorkLabel(task.channelName);
   return (
     <div className="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: task.channelColor }} />
-          <span className="font-semibold text-ink">{task.channelName.replace(/\s*\(Top 3\)$/i, "")}</span>
+          <span className="font-semibold text-ink">{workLabel}</span>
           {!task.explicitOwner && (
             <span
               className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-muted"
@@ -115,17 +117,24 @@ function TaskRow({ task, today, canEdit }: { task: MyTask; today: Date; canEdit:
             </span>
           )}
         </div>
+        <p className="mt-1 text-xs text-muted">Channel: {task.channelName.replace(/\s*\(Top 3\)$/i, "")}</p>
         <span className={`mt-1.5 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${due.className}`}>
           {due.text}
         </span>
       </div>
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <ProofActions id={task.id} status={task.status} />
+          <ProofActions
+            id={task.id}
+            status={task.status}
+            workLabel={workLabel}
+            eventTitle={task.requestTitle}
+          />
           <DeliverableStatusButton
             id={task.id}
             status={task.status}
-            label={`${task.requestTitle}, ${task.channelName}`}
+            workLabel={workLabel}
+            eventTitle={task.requestTitle}
           />
         </div>
       )}

@@ -13,17 +13,19 @@ export function OwnerAssign({
   requestId,
   ownerId,
   users,
+  eventTitle,
 }: {
   requestId: string;
   ownerId: string | null;
   users: ActiveUser[];
+  eventTitle: string;
 }) {
   const [pending, start] = useTransition();
 
   return (
     <select
-      aria-label="Assign owner"
-      title="Assign owner"
+      aria-label={`Choose the overall event owner for ${eventTitle}`}
+      title={`This person coordinates the whole ${eventTitle} communication plan`}
       value={ownerId ?? ""}
       disabled={pending}
       onChange={(e) => {
@@ -33,7 +35,7 @@ export function OwnerAssign({
       }}
       className="rounded-full border px-3 py-1 text-xs font-semibold text-muted cursor-pointer hover:bg-sky-bg transition disabled:opacity-50"
     >
-      <option value="">Unassigned</option>
+      <option value="">No overall event owner</option>
       {users.map((u) => (
         <option key={u.id} value={u.id}>
           {u.name}

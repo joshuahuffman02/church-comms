@@ -18,6 +18,8 @@ export function DeliverableOwner({
   explicit,
   currentUserId,
   users,
+  workLabel,
+  eventTitle,
 }: {
   deliverableId: string;
   effectiveOwnerId: string | null;
@@ -25,23 +27,30 @@ export function DeliverableOwner({
   explicit: boolean;
   currentUserId: string;
   users: ActiveUser[];
+  workLabel: string;
+  eventTitle: string;
 }) {
   const [pending, start] = useTransition();
   const [open, setOpen] = useState(false);
 
   const ini = effectiveOwnerName ? initialsOf(effectiveOwnerName) : null;
   const mine = effectiveOwnerId === currentUserId;
+  const fullWorkLabel = `${workLabel} for ${eventTitle}`;
 
   return (
     <div className="relative flex items-center gap-1.5">
       {ini ? (
-        <span
-          title={`${effectiveOwnerName}${explicit ? "" : " (from event)"}`}
-          className={`grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[10px] font-bold ${
-            explicit ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"
-          }`}
-        >
-          {ini}
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink">
+          <span
+            title={`${effectiveOwnerName}${explicit ? " owns this piece" : " is inherited from the overall event"}`}
+            className={`grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[10px] font-bold ${
+              explicit ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {ini}
+          </span>
+          <span className="max-w-28 truncate">{effectiveOwnerName}</span>
+          {!explicit && <span className="text-[10px] font-medium text-muted">from event</span>}
         </span>
       ) : (
         <button
@@ -49,7 +58,8 @@ export function DeliverableOwner({
           disabled={pending}
           onClick={() => start(() => claimDeliverable(deliverableId))}
           className="rounded-full border border-sky-200 px-2.5 py-1 text-[11px] font-semibold text-sky-700 hover:bg-sky-50 transition disabled:opacity-50"
-          title="Assign this to me"
+          title={`Assign the ${fullWorkLabel} to me`}
+          aria-label={`Assign the ${fullWorkLabel} to me`}
         >
           ✋ claim
         </button>
@@ -61,7 +71,8 @@ export function DeliverableOwner({
           disabled={pending}
           onClick={() => start(() => claimDeliverable(deliverableId))}
           className="text-[11px] font-semibold text-sky-700 hover:underline disabled:opacity-50"
-          title="Take this over"
+          title={`Take over the ${fullWorkLabel}`}
+          aria-label={`Take over the ${fullWorkLabel}`}
         >
           claim
         </button>
@@ -73,7 +84,8 @@ export function DeliverableOwner({
         className="rounded-full px-1.5 text-muted hover:bg-slate-100 transition"
         aria-haspopup="listbox"
         aria-expanded={open}
-        title="Assign to…"
+        title={`Choose the piece owner for the ${fullWorkLabel}`}
+        aria-label={`Choose the piece owner for the ${fullWorkLabel}`}
       >
         ▾
       </button>
@@ -91,7 +103,7 @@ export function DeliverableOwner({
             }}
             className="block w-full rounded-xl px-3 py-1.5 text-left text-xs text-muted hover:bg-slate-50 disabled:opacity-50"
           >
-            Unassign
+            Use overall event owner
           </button>
           {users.map((u) => (
             <button
