@@ -3,6 +3,7 @@ import { weekRange, comingSunday } from "@/lib/week";
 import { addDays, parseDateInput } from "@/lib/engine/dates";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { loadAnnouncementVideoLineup } from "@/lib/announcement-video";
+import { effectiveEventCap, splitByWeeklyCap } from "@/lib/social-curation";
 
 // ---------------------------------------------------------------------------
 // Pure builders
@@ -182,6 +183,62 @@ export function buildVideoScript(
   return [header, "", introLine, "", ...interleaveBlocks(blocks), outroLine].join("\n");
 }
 
+export type ActiveExportChannel = {
+  id: string;
+  key: string;
+  name: string;
+  type: string;
+  color: string;
+  capacity: number | null;
+  frequencyCap: number | null;
+};
+
+export type ChannelHandoffItem = {
+  title: string;
+  scheduledAt: Date;
+  content: string | null;
+  description: string | null;
+  nextStepText: string | null;
+  assetLink: string | null;
+  note: string | null;
+  purposeLabel: string | null;
+};
+
+function formatScheduledDate(date: Date): string {
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/**
+ * Paste-ready weekly copy for any active channel that does not have a more
+ * specialized handoff. Each scheduled placement stays visible because a
+ * windowed channel may intentionally use different copy on different days.
+ */
+export function buildChannelHandoff(
+  channelName: string,
+  items: ChannelHandoffItem[],
+  sunday: Date,
+): string {
+  const header = `${channelName} — Week ending Sunday ${formatSunday(sunday)}`;
+  const blocks = items.map((item, index) => {
+    const custom = (item.content ?? "").trim();
+    const description = (item.description ?? "").trim();
+    const nextStep = (item.nextStepText ?? "").trim();
+    const copy = oneLine(custom || description || nextStep);
+    const lines = [`${index + 1}. ${formatScheduledDate(item.scheduledAt)} · ${item.title}`];
+    if (item.purposeLabel?.trim()) lines.push(`Purpose: ${oneLine(item.purposeLabel)}`);
+    if (copy) lines.push(copy);
+    if (nextStep && oneLine(nextStep) !== copy) lines.push(`Next step: ${oneLine(nextStep)}`);
+    if (item.assetLink?.trim()) lines.push(`Asset: ${oneLine(item.assetLink)}`);
+    if (item.note?.trim()) lines.push(`Note: ${oneLine(item.note)}`);
+    return lines.join("\n");
+  });
+  return [header, "", ...interleaveBlocks(blocks)].join("\n").trimEnd();
+}
+
 /** Join read-aloud blocks with a blank line between each, trailed by a blank line. */
 function interleaveBlocks(blocks: string[]): string[] {
   if (blocks.length === 0) return [];
@@ -203,6 +260,113 @@ const touchInclude = {
 async function channelIdByKey(key: string): Promise<string | null> {
   const ch = await db.channel.findUnique({ where: { key }, select: { id: true } });
   return ch?.id ?? null;
+}
+
+/** The exact channel list configured as active in Settings, in display order. */
+export function loadActiveExportChannels(): Promise<ActiveExportChannel[]> {
+  return db.channel.findMany({
+    where: { active: true },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: {
+      id: true,
+      key: true,
+      name: true,
+      type: true,
+      color: true,
+      capacity: true,
+      frequencyCap: true,
+    },
+  });
+}
+
+/**
+ * Resolve the same live/capped placements shown on a channel page for a
+ * selected week, then shape them for the generic text handoff.
+ */
+export async function loadChannelHandoffs(
+  channels: ActiveExportChannel[],
+  selectedSunday: Date,
+): Promise<Map<string, { sunday: Date; items: ChannelHandoffItem[] }>> {
+  const { start, end } = weekRange(selectedSunday);
+  const sunday = comingSunday(selectedSunday);
+  const channelIds = channels.map((channel) => channel.id);
+  const output = new Map<string, { sunday: Date; items: ChannelHandoffItem[] }>();
+  if (channelIds.length === 0) return output;
+
+  const [touches, locks] = await Promise.all([
+    db.touch.findMany({
+      where: {
+        channelId: { in: channelIds },
+        deliverable: {
+          request: { status: { in: PROMOTABLE_REQUEST_STATUSES }, noPromo: false },
+        },
+        scheduledAt: { gte: start, lt: addDays(end, 1) },
+      },
+      include: touchInclude,
+      orderBy: [
+        { scheduledAt: "asc" },
+        { deliverable: { request: { tier: "asc" } } },
+        { deliverable: { request: { eventStart: "asc" } } },
+        { deliverable: { request: { title: "asc" } } },
+      ],
+    }),
+    db.scheduleLock.findMany({
+      where: {
+        channelId: { in: channelIds },
+        scheduledAt: { gte: start, lt: addDays(end, 1) },
+      },
+      select: { channelId: true, requestId: true },
+      orderBy: [{ scheduledAt: "asc" }, { createdAt: "asc" }],
+    }),
+  ]);
+
+  const touchesByChannel = new Map<string, typeof touches>();
+  for (const touch of touches) {
+    touchesByChannel.set(touch.channelId, [...(touchesByChannel.get(touch.channelId) ?? []), touch]);
+  }
+  const preferredByChannel = new Map<string, string[]>();
+  for (const lock of locks) {
+    const preferred = preferredByChannel.get(lock.channelId) ?? [];
+    if (!preferred.includes(lock.requestId)) preferred.push(lock.requestId);
+    preferredByChannel.set(lock.channelId, preferred);
+  }
+
+  for (const channel of channels) {
+    const channelTouches = touchesByChannel.get(channel.id) ?? [];
+    const { live } = splitByWeeklyCap(
+      channelTouches,
+      (touch) => ({
+        requestId: touch.deliverable.request.id,
+        tier: touch.deliverable.request.tier,
+        eventStartMs: touch.deliverable.request.eventStart.getTime(),
+        title: touch.deliverable.request.title,
+      }),
+      effectiveEventCap(channel),
+      preferredByChannel.get(channel.id),
+    );
+    output.set(channel.key, {
+      sunday,
+      items: live.map((touch) => ({
+        title: touch.deliverable.request.title,
+        scheduledAt: touch.scheduledAt,
+        content: touch.content,
+        description: touch.deliverable.request.description,
+        nextStepText: touch.deliverable.request.nextStepText,
+        assetLink: touch.assetLink ?? touch.deliverable.assetLink,
+        note: touch.note,
+        purposeLabel: touch.purposeLabel,
+      })),
+    });
+  }
+  return output;
+}
+
+export async function loadChannelHandoff(
+  channel: ActiveExportChannel,
+  selectedSunday: Date,
+): Promise<{ sunday: Date; items: ChannelHandoffItem[] }> {
+  const handoffs = await loadChannelHandoffs([channel], selectedSunday);
+  return handoffs.get(channel.key) ?? { sunday: comingSunday(selectedSunday), items: [] };
 }
 
 /** Loop touches scheduled on the coming Sunday, shaped for buildLoopList. */

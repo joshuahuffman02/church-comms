@@ -4,11 +4,13 @@ import {
   buildBulletinCopy,
   buildVideoRunOfShow,
   buildVideoScript,
+  buildChannelHandoff,
   exportSundayFromParam,
   type LoopItem,
   type BulletinItem,
   type VideoItem,
   type VideoScriptItem,
+  type ChannelHandoffItem,
 } from "../src/lib/exports";
 import { atMidnight } from "../src/lib/engine/dates";
 
@@ -163,5 +165,41 @@ describe("buildVideoScript", () => {
     expect(out).toContain("Bring a dish to share!"); // per-touch content wins
     expect(out).not.toContain("Fourth item"); // capped at 3
     expect(out.split("\n")[0]).toMatch(/^Announcement Video Script — Sunday /);
+  });
+});
+
+describe("buildChannelHandoff", () => {
+  const items: ChannelHandoffItem[] = [
+    {
+      title: "Family Movie Night",
+      scheduledAt: atMidnight(new Date("2026-07-22")),
+      content: "Join us outside for a family movie.",
+      description: "Fallback description",
+      nextStepText: "Bring a lawn chair",
+      assetLink: "https://example.com/movie-art",
+      note: "Post after lunch",
+      purposeLabel: "Registration open",
+    },
+  ];
+
+  it("names the channel and export week", () => {
+    const out = buildChannelHandoff("Facebook", items, atMidnight(new Date("2026-07-26")));
+    expect(out.split("\n")[0]).toMatch(/^Facebook — Week ending Sunday /);
+    expect(out.split("\n")[0]).toContain("2026");
+  });
+
+  it("keeps each dated placement and prefers its custom copy", () => {
+    const out = buildChannelHandoff("Facebook", items, atMidnight(new Date("2026-07-26")));
+    expect(out).toContain("Wed, Jul 22 · Family Movie Night");
+    expect(out).toContain("Join us outside for a family movie.");
+    expect(out).not.toContain("Fallback description");
+    expect(out).toContain("Next step: Bring a lawn chair");
+    expect(out).toContain("Asset: https://example.com/movie-art");
+    expect(out).toContain("Note: Post after lunch");
+  });
+
+  it("returns a useful header when a channel has no scheduled work", () => {
+    expect(buildChannelHandoff("Church App", [], atMidnight(new Date("2026-07-26"))))
+      .toMatch(/^Church App — Week ending Sunday /);
   });
 });

@@ -10,21 +10,28 @@ import {
   Download,
   FileText,
   ListVideo,
+  Mail,
+  Megaphone,
   MonitorPlay,
-  Newspaper,
+  PanelTop,
   PencilLine,
+  Radio,
   Settings2,
+  Smartphone,
+  TableProperties,
 } from "lucide-react";
 import {
+  buildChannelHandoff,
   buildLoopList,
-  buildBulletinCopy,
   buildVideoRunOfShow,
   buildVideoScript,
   exportSundayFromParam,
+  loadActiveExportChannels,
+  loadChannelHandoffs,
   loadLoopForComingSunday,
-  loadBulletinThisWeek,
   loadVideoThisWeek,
   loadVideoScriptThisWeek,
+  type ActiveExportChannel,
   ymd,
 } from "@/lib/exports";
 import { CopyButton } from "@/components/copy-button";
@@ -35,34 +42,48 @@ import { comingSunday } from "@/lib/week";
 export const dynamic = "force-dynamic";
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type ExportTone = "emerald" | "slate" | "violet" | "indigo";
 
-const TONE = {
-  emerald: {
-    border: "border-l-emerald-400",
-    icon: "bg-emerald-100 text-emerald-800",
-    action: "bg-emerald-600 hover:bg-emerald-700",
-    accent: "#059669",
-  },
-  slate: {
-    border: "border-l-slate-400",
-    icon: "bg-slate-100 text-slate-700",
-    action: "bg-slate-700 hover:bg-slate-800",
-    accent: "#475569",
-  },
-  violet: {
-    border: "border-l-violet-400",
-    icon: "bg-violet-100 text-violet-800",
-    action: "bg-violet-600 hover:bg-violet-700",
-    accent: "#7c3aed",
-  },
-  indigo: {
-    border: "border-l-indigo-400",
-    icon: "bg-indigo-100 text-indigo-800",
-    action: "bg-indigo-600 hover:bg-indigo-700",
-    accent: "#4f46e5",
-  },
-} as const;
+type ExportFile = {
+  title: string;
+  purpose: string;
+  count: number;
+  itemLabel: string;
+  href: string;
+  filename: string;
+  text: string;
+  copyLabel: string;
+};
+
+type ChannelCardData = {
+  channel: ActiveExportChannel;
+  icon: LucideIcon;
+  purpose: string;
+  scheduledCount: number;
+  scheduledLabel: string;
+  files: ExportFile[];
+  secondaryHref?: string;
+  secondaryLabel?: string;
+};
+
+const CHANNEL_ICONS: Record<string, LucideIcon> = {
+  announcement_video: ListVideo,
+  loop: MonitorPlay,
+  app: Smartphone,
+  facebook: Megaphone,
+  email: Mail,
+  opps_table: TableProperties,
+  banner: PanelTop,
+};
+
+const CHANNEL_PURPOSES: Record<string, string> = {
+  announcement_video: "Final Sunday lineup and ready-to-read speaker script",
+  loop: "Sunday slides for the pre-service ProPresenter loop",
+  app: "Scheduled copy for the Church App",
+  facebook: "Scheduled social copy for Facebook",
+  email: "Copy blocks for the weekly PV Update email",
+  opps_table: "Current items for the Opportunities Table",
+  banner: "Copy and production notes for the outdoor banner",
+};
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -85,6 +106,10 @@ function downloadHref(path: string, date: Date): string {
   return `${path}?sunday=${ymd(date)}`;
 }
 
+function countLabel(count: number, itemLabel: string): string {
+  return `${count} ${count === 1 ? itemLabel : `${itemLabel}s`}`;
+}
+
 function SummaryCard({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="rounded-2xl bg-white/70 px-4 py-3 ring-1 ring-inset ring-slate-100">
@@ -95,114 +120,107 @@ function SummaryCard({ label, value, detail }: { label: string; value: string; d
   );
 }
 
-function ExportCard({
-  title,
-  purpose,
-  count,
-  itemLabel,
-  href,
-  filename,
-  text,
-  tone,
-  icon: Icon,
-  copyLabel,
-  sourceHref,
-  sourceLabel,
-  secondaryHref,
-  secondaryLabel,
-}: {
-  title: string;
-  purpose: string;
-  count: number;
-  itemLabel: string;
-  href: string;
-  filename: string;
-  text: string;
-  tone: ExportTone;
-  icon: LucideIcon;
-  copyLabel: string;
-  sourceHref: string;
-  sourceLabel: string;
-  secondaryHref?: string;
-  secondaryLabel?: string;
-}) {
-  const style = TONE[tone];
-  const empty = count === 0;
-  const countText = `${count} ${count === 1 ? itemLabel : `${itemLabel}s`}`;
+function FileHandoff({ file, color }: { file: ExportFile; color: string }) {
+  const empty = file.count === 0;
+  const items = countLabel(file.count, file.itemLabel);
 
   return (
-    <article className={`card-float overflow-hidden border-l-[5px] ${style.border}`}>
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-extrabold text-ink">{file.title}</h3>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
+              {items}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-muted">{file.purpose}</p>
+          <p className="mt-1 truncate text-xs font-medium text-slate-500">{file.filename}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <CopyButton text={file.text} accent={color} label={file.copyLabel} disabled={empty} />
+          {!empty && (
+            <a
+              href={file.href}
+              download={file.filename}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+              style={{ backgroundColor: color }}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" /> Download .txt
+            </a>
+          )}
+        </div>
+      </div>
+      {!empty && (
+        <details className="group mt-3 rounded-xl border border-slate-200 bg-white">
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-bold text-ink marker:content-none">
+            <span>Preview {items}</span>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" aria-hidden="true" />
+          </summary>
+          <pre className="max-h-96 overflow-auto border-t border-slate-200 px-4 py-4 font-sans text-sm leading-6 whitespace-pre-wrap break-words text-ink">
+            {file.text}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function ChannelCard({ data }: { data: ChannelCardData }) {
+  const { channel, icon: Icon, scheduledCount, scheduledLabel, files } = data;
+  const empty = scheduledCount === 0;
+
+  return (
+    <article className="card-float overflow-hidden border-l-[5px]" style={{ borderLeftColor: channel.color }}>
       <div className="p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex min-w-0 items-start gap-3">
-            <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl ${style.icon}`}>
+            <span
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+              style={{ backgroundColor: `${channel.color}1f`, color: channel.color }}
+            >
               <Icon className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-extrabold text-ink">{title}</h2>
+                <h2 className="text-lg font-extrabold text-ink">{channel.name}</h2>
                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${empty ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>
                   {empty ? <CircleDashed className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
                   {empty ? "Nothing scheduled" : "Ready"}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-muted">{purpose}</p>
+              <p className="mt-1 text-sm text-muted">{data.purpose}</p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">{countText}</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">Plain text · .txt</span>
-                <span className="rounded-full bg-slate-100 px-2.5 py-1">Built from the live schedule</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1">{countLabel(scheduledCount, scheduledLabel)}</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1">{files.length} {files.length === 1 ? "handoff" : "handoffs"}</span>
+                <span className="rounded-full bg-slate-100 px-2.5 py-1">Built from the live channel</span>
               </div>
             </div>
           </div>
-
-          <div className="flex shrink-0 flex-wrap items-center gap-2 xl:justify-end">
-            <CopyButton text={text} accent={style.accent} label={copyLabel} disabled={empty} />
-            {!empty && (
-              <a
-                href={href}
-                download={filename}
-                aria-label={`Download ${title} as a text file`}
-                className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white transition ${style.action}`}
-              >
-                <Download className="h-4 w-4" aria-hidden="true" /> Download .txt
-              </a>
-            )}
-          </div>
+          <Link
+            href={`/outputs/${channel.key}`}
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold text-ink hover:bg-sky-bg"
+          >
+            <PencilLine className="h-4 w-4" aria-hidden="true" /> Open channel
+          </Link>
         </div>
 
         {empty ? (
-          <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="font-bold text-amber-950">There is no file to hand off yet.</p>
-              <p className="mt-0.5 text-sm text-amber-900/75">Add or schedule an item in the source channel, then this export will fill itself.</p>
-            </div>
-            <Link href={sourceHref} className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-amber-300 px-4 py-2 text-sm font-bold text-amber-950 hover:bg-amber-100">
-              <PencilLine className="h-4 w-4" aria-hidden="true" /> {sourceLabel}
-            </Link>
+          <div className="mt-4 rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-4">
+            <p className="font-bold text-amber-950">There is no handoff for this channel yet.</p>
+            <p className="mt-0.5 text-sm text-amber-900/75">Schedule an item in this channel for the selected week and it will appear here automatically.</p>
           </div>
         ) : (
-          <details className="group mt-4 rounded-2xl border border-slate-200 bg-slate-50/70">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-ink marker:content-none">
-              <span>Preview {countText}</span>
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted transition group-open:rotate-180" aria-hidden="true" />
-            </summary>
-            <pre className="max-h-96 overflow-auto border-t border-slate-200 bg-white px-4 py-4 font-sans text-sm leading-6 whitespace-pre-wrap break-words text-ink">
-              {text}
-            </pre>
-          </details>
+          <div className="mt-4 grid gap-3">
+            {files.map((file) => <FileHandoff key={file.href} file={file} color={channel.color} />)}
+          </div>
         )}
 
-        {!empty && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-            <span className="text-xs font-bold uppercase tracking-wide text-muted">Something looks wrong?</span>
-            <Link href={sourceHref} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50">
-              <PencilLine className="h-3.5 w-3.5" aria-hidden="true" /> {sourceLabel}
+        {!empty && data.secondaryHref && data.secondaryLabel && (
+          <div className="mt-4 border-t border-slate-100 pt-4">
+            <Link href={data.secondaryHref} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50">
+              <Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> {data.secondaryLabel}
             </Link>
-            {secondaryHref && secondaryLabel && (
-              <Link href={secondaryHref} className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold text-sky-700 hover:bg-sky-50">
-                <Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> {secondaryLabel}
-              </Link>
-            )}
           </div>
         )}
       </div>
@@ -223,19 +241,100 @@ export default async function ExportsPage({
   const selectedKey = ymd(selectedSunday);
   const isCurrent = selectedSunday.getTime() === currentSunday.getTime();
 
-  const [loop, bulletin, video, script] = await Promise.all([
+  const [channels, loop, video, script] = await Promise.all([
+    loadActiveExportChannels(),
     loadLoopForComingSunday(selectedSunday),
-    loadBulletinThisWeek(selectedSunday),
     loadVideoThisWeek(selectedSunday),
     loadVideoScriptThisWeek(selectedSunday),
   ]);
+  const genericChannels = channels.filter((channel) => channel.key !== "loop" && channel.key !== "announcement_video");
+  const genericHandoffs = await loadChannelHandoffs(genericChannels, selectedSunday);
 
   const loopText = buildLoopList(loop.items, loop.sunday);
-  const bulletinText = buildBulletinCopy(bulletin.items);
   const videoText = buildVideoRunOfShow(video.items, video.sunday);
   const scriptText = buildVideoScript(script.items, script.sunday, script.intro, script.outro);
-  const counts = [loop.items.length, bulletin.items.length, video.items.length, script.items.length];
-  const readyCount = counts.filter((count) => count > 0).length;
+
+  const cards: ChannelCardData[] = channels.map((channel) => {
+    const icon = CHANNEL_ICONS[channel.key] ?? Radio;
+    const purpose = CHANNEL_PURPOSES[channel.key] ?? "Weekly copy and production handoff for this active channel";
+
+    if (channel.key === "loop") {
+      return {
+        channel,
+        icon,
+        purpose,
+        scheduledCount: loop.items.length,
+        scheduledLabel: "slide",
+        files: [{
+          title: "Pre-Service Loop",
+          purpose: "One Sunday slide per line for ProPresenter",
+          count: loop.items.length,
+          itemLabel: "slide",
+          href: downloadHref("/exports/loop", selectedSunday),
+          filename: `pre-service-loop-${selectedKey}.txt`,
+          text: loopText,
+          copyLabel: "Copy loop list",
+        }],
+      };
+    }
+
+    if (channel.key === "announcement_video") {
+      return {
+        channel,
+        icon,
+        purpose,
+        scheduledCount: video.items.length,
+        scheduledLabel: "announcement",
+        files: [
+          {
+            title: "Run of show",
+            purpose: "The final top-three order for the video team",
+            count: video.items.length,
+            itemLabel: "announcement",
+            href: downloadHref("/exports/video", selectedSunday),
+            filename: `announcement-video-run-of-show-${selectedKey}.txt`,
+            text: videoText,
+            copyLabel: "Copy run of show",
+          },
+          {
+            title: "Speaker script",
+            purpose: "Intro, final top three, and outro in read-aloud format",
+            count: script.items.length,
+            itemLabel: "section",
+            href: downloadHref("/exports/video-script", selectedSunday),
+            filename: `announcement-script-${selectedKey}.txt`,
+            text: scriptText,
+            copyLabel: "Copy video script",
+          },
+        ],
+        secondaryHref: "/settings/video-script",
+        secondaryLabel: "Edit video intro and outro",
+      };
+    }
+
+    const handoff = genericHandoffs.get(channel.key) ?? { sunday: selectedSunday, items: [] };
+    const text = buildChannelHandoff(channel.name, handoff.items, handoff.sunday);
+    return {
+      channel,
+      icon,
+      purpose,
+      scheduledCount: handoff.items.length,
+      scheduledLabel: "placement",
+      files: [{
+        title: "Weekly channel copy",
+        purpose: "Scheduled dates, copy, next steps, assets, and notes",
+        count: handoff.items.length,
+        itemLabel: "placement",
+        href: downloadHref(`/exports/channel/${channel.key}`, selectedSunday),
+        filename: `${channel.key}-${selectedKey}.txt`,
+        text,
+        copyLabel: `Copy ${channel.name}`,
+      }],
+    };
+  });
+
+  const readyChannelCount = cards.filter((card) => card.scheduledCount > 0).length;
+  const totalPlacements = cards.reduce((count, card) => count + card.scheduledCount, 0);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -245,7 +344,7 @@ export default async function ExportsPage({
             <p className="text-xs font-bold uppercase tracking-wide text-sky-700">Weekly handoff workspace</p>
             <h1 className="mt-1 text-3xl font-extrabold text-ink">Downloads</h1>
             <p className="mt-1 max-w-3xl text-muted">
-              Review the final copy for {fullSunday(selectedSunday)}, then copy it or download a clearly named text file.
+              Every active channel for {fullSunday(selectedSunday)}, in the same order as your channel settings.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -254,9 +353,9 @@ export default async function ExportsPage({
           </div>
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryCard label="Ready files" value={`${readyCount} of 4`} detail={readyCount === 4 ? "Every handoff is ready" : `${4 - readyCount} still empty`} />
-          <SummaryCard label="Loop slides" value={String(loop.items.length)} detail="For ProPresenter" />
-          <SummaryCard label="Video lineup" value={`${video.items.length} of 3`} detail="Final announcement order" />
+          <SummaryCard label="Active channels" value={String(channels.length)} detail="Synced from channel settings" />
+          <SummaryCard label="Ready channels" value={`${readyChannelCount} of ${channels.length}`} detail={readyChannelCount === channels.length ? "Every channel has a handoff" : `${channels.length - readyChannelCount} have nothing scheduled`} />
+          <SummaryCard label="Scheduled work" value={String(totalPlacements)} detail="Across this export week" />
           <SummaryCard label="File format" value=".txt" detail="Easy to copy or open anywhere" />
         </div>
       </header>
@@ -270,9 +369,7 @@ export default async function ExportsPage({
             <CalendarDays className="h-4 w-4" aria-hidden="true" /> Export week
           </p>
           <p className="mt-0.5 font-extrabold text-ink">{fullSunday(selectedSunday)}</p>
-          {!isCurrent && (
-            <Link href={sundayHref(currentSunday)} className="mt-1 inline-flex text-xs font-bold text-sky-700 hover:underline">Return to coming Sunday</Link>
-          )}
+          {!isCurrent && <Link href={sundayHref(currentSunday)} className="mt-1 inline-flex text-xs font-bold text-sky-700 hover:underline">Return to coming Sunday</Link>}
         </div>
         <Link href={sundayHref(nextSunday)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-ink hover:bg-sky-bg">
           Next Sunday <ArrowRight className="h-4 w-4" aria-hidden="true" />
@@ -281,71 +378,14 @@ export default async function ExportsPage({
 
       <section className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between" aria-labelledby="handoff-heading">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-muted">Four focused handoffs</p>
-          <h2 id="handoff-heading" className="mt-0.5 text-2xl font-extrabold text-ink">Choose what you are sending</h2>
+          <p className="text-xs font-bold uppercase tracking-wide text-muted">Current active channels</p>
+          <h2 id="handoff-heading" className="mt-0.5 text-2xl font-extrabold text-ink">One place for every channel handoff</h2>
         </div>
-        <p className="text-sm text-muted">Previews stay compact until you open them.</p>
+        <Link href="/settings/channels" className="text-sm font-bold text-sky-700 hover:underline">Manage active channels →</Link>
       </section>
 
       <div className="grid gap-4">
-        <ExportCard
-          title="Pre-Service Loop"
-          purpose="For ProPresenter · one Sunday slide per line"
-          count={loop.items.length}
-          itemLabel="slide"
-          href={downloadHref("/exports/loop", selectedSunday)}
-          filename={`pre-service-loop-${selectedKey}.txt`}
-          text={loopText}
-          tone="emerald"
-          icon={MonitorPlay}
-          copyLabel="Copy loop list"
-          sourceHref="/outputs/loop"
-          sourceLabel="Edit Sunday Loop"
-        />
-        <ExportCard
-          title="Bulletin Copy"
-          purpose="For the printed bulletin · paste-ready announcement blurbs"
-          count={bulletin.items.length}
-          itemLabel="announcement"
-          href={downloadHref("/exports/bulletin", selectedSunday)}
-          filename={`bulletin-copy-${selectedKey}.txt`}
-          text={bulletinText}
-          tone="slate"
-          icon={Newspaper}
-          copyLabel="Copy bulletin copy"
-          sourceHref="/outputs/inserts"
-          sourceLabel="Edit Bulletin channel"
-        />
-        <ExportCard
-          title="Announcement Video — Run of Show"
-          purpose="For the video team · the final top-three order"
-          count={video.items.length}
-          itemLabel="announcement"
-          href={downloadHref("/exports/video", selectedSunday)}
-          filename={`announcement-video-run-of-show-${selectedKey}.txt`}
-          text={videoText}
-          tone="violet"
-          icon={ListVideo}
-          copyLabel="Copy run of show"
-          sourceHref="/outputs/announcement_video"
-          sourceLabel="Edit video lineup"
-        />
-        <ExportCard
-          title="Announcement Video Script"
-          purpose="For the speaker · intro, final top three, and outro"
-          count={script.items.length}
-          itemLabel="script section"
-          href={downloadHref("/exports/video-script", selectedSunday)}
-          filename={`announcement-script-${selectedKey}.txt`}
-          text={scriptText}
-          tone="indigo"
-          icon={FileText}
-          copyLabel="Copy video script"
-          sourceHref="/outputs/announcement_video"
-          sourceLabel="Edit weekly script copy"
-          secondaryHref="/settings/video-script"
-          secondaryLabel="Edit intro and outro"
-        />
+        {cards.map((card) => <ChannelCard key={card.channel.id} data={card} />)}
       </div>
     </div>
   );
