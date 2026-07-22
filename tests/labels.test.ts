@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { channelWorkLabel } from "../src/lib/labels";
+import { channelWorkDateLabel, channelWorkLabel } from "../src/lib/labels";
 
 describe("channelWorkLabel", () => {
   it("names the concrete production work for standard channels", () => {
@@ -12,5 +12,13 @@ describe("channelWorkLabel", () => {
 
   it("falls back to a clear piece label for custom channels", () => {
     expect(channelWorkLabel("Lobby TV")).toBe("Lobby TV piece");
+  });
+
+  it("explains what the selected channel date means", () => {
+    expect(channelWorkDateLabel("PV Update Email")).toBe("Sent on");
+    expect(channelWorkDateLabel("Facebook")).toBe("Posted on");
+    expect(channelWorkDateLabel("Website")).toBe("Published on");
+    expect(channelWorkDateLabel("Sunday Loop")).toBe("Used on");
+    expect(channelWorkDateLabel("Lobby TV")).toBe("Goes live on");
   });
 });

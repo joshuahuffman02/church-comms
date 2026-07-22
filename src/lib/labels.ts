@@ -52,6 +52,31 @@ export function channelWorkLabel(channelName: string): string {
   return `${cleanName} piece`;
 }
 
+/** Describe what the selected date means for a channel's concrete work. */
+export function channelWorkDateLabel(channelName: string): string {
+  const normalized = channelName.toLowerCase();
+  if (normalized.includes("email")) return "Sent on";
+  if (
+    normalized.includes("facebook") ||
+    normalized.includes("instagram") ||
+    normalized === "app" ||
+    normalized.includes("church app")
+  ) {
+    return "Posted on";
+  }
+  if (normalized.includes("website") || normalized === "web") return "Published on";
+  if (
+    normalized.includes("video") ||
+    normalized.includes("loop") ||
+    normalized.includes("stage") ||
+    normalized.includes("sign") ||
+    normalized.includes("display")
+  ) {
+    return "Used on";
+  }
+  return "Goes live on";
+}
+
 /** Generic slug humanizer: "board_approval" / "board-approval" -> "Board Approval". */
 export function titleCase(slug: string): string {
   return slug

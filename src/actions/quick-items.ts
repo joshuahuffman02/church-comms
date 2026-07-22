@@ -3,7 +3,13 @@ import { db } from "@/lib/db";
 import { requireEditor } from "@/lib/authz";
 import { logRequestActivity } from "@/lib/activity";
 import { parseDateInput, subDays } from "@/lib/engine/dates";
+import {
+  parseQuickItemForm,
+  quickItemProductionDueAt,
+  type QuickItemFormState,
+} from "@/lib/quick-items";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 /** Read a form field as a trimmed string, or undefined when blank. */
 function optStr(fd: FormData, key: string): string | undefined {
@@ -45,55 +51,77 @@ function placementFor(
  * This-Week, and calendar views as everything else.
  *
  * Fields: title (required), channelId (required), date (required), optional
- * assetLink + note.
+ * ownerId, assetLink, and note. Invalid input returns field errors to the form;
+ * a successful write redirects to the chosen channel with a success message.
  */
-export async function createQuickItem(fd: FormData) {
+export async function createQuickItem(
+  _previousState: QuickItemFormState,
+  fd: FormData,
+): Promise<QuickItemFormState> {
   const user = await requireEditor();
+  const parsed = parseQuickItemForm(fd);
+  if (!parsed.ok) return parsed.state;
+  const input = parsed.value;
 
-  const title = optStr(fd, "title");
-  const channelId = optStr(fd, "channelId");
-  const date = parseDateInput(String(fd.get("date") ?? ""));
-  // Bail without mutating if any required field is missing/invalid.
-  if (!title || !channelId || !date) return;
+  const [channel, owner] = await Promise.all([
+    db.channel.findFirst({ where: { id: input.channelId, active: true } }),
+    input.ownerId
+      ? db.user.findFirst({ where: { id: input.ownerId, active: true }, select: { id: true, name: true } })
+      : Promise.resolve(null),
+  ]);
+  if (!channel) {
+    return {
+      status: "error",
+      message: "That channel is no longer available. Choose another channel.",
+      fieldErrors: { channelId: "Choose an active channel." },
+    };
+  }
+  if (input.ownerId && !owner) {
+    return {
+      status: "error",
+      message: "That owner is no longer available. Choose someone else.",
+      fieldErrors: { ownerId: "Choose an active person or leave this unassigned." },
+    };
+  }
 
-  const assetLink = optStr(fd, "assetLink");
-  const note = optStr(fd, "note");
-
-  const channel = await db.channel.findUnique({ where: { id: channelId } });
-  if (!channel) throw new Error("Channel not found");
-
-  const productionDueAt = subDays(date, channel.productionLeadDays);
-  const placement = placementFor(channel.type, date);
+  const productionDueAt = quickItemProductionDueAt(
+    input.date,
+    channel.productionLeadDays,
+  );
+  const placement = placementFor(channel.type, input.date);
 
   // Quick items are leadership-facing tier-3 standalone things; the human-
   // readable text is the Request title (so it surfaces nicely) and is also
   // mirrored onto the Deliverable.notes + the single Touch's content.
   const request = await db.request.create({
     data: {
-      title,
+      title: input.title,
       status: "approved",
       tier: 3,
       whoIsItFor: "leadership",
       notes: "__quick__",
-      eventStart: date,
+      eventStart: input.date,
+      requesterId: user.id,
+      ownerId: owner?.id ?? null,
       deliverables: {
         create: {
-          channelId,
+          channelId: channel.id,
           status: "to_design",
           productionDueAt,
           instanceDate: placement.instanceDate,
           windowStart: placement.windowStart,
           windowEnd: placement.windowEnd,
-          notes: title,
-          assetLink: assetLink ?? null,
+          notes: input.title,
+          assetLink: input.assetLink,
+          ownerId: owner?.id ?? null,
           touches: {
             create: {
-              channelId,
-              scheduledAt: date,
+              channelId: channel.id,
+              scheduledAt: input.date,
               purposeLabel: "quick",
-              content: title,
-              assetLink: assetLink ?? null,
-              note: note ?? null,
+              content: input.title,
+              assetLink: input.assetLink,
+              note: input.note,
             },
           },
         },
@@ -106,7 +134,14 @@ export async function createQuickItem(fd: FormData) {
       requestId: request.id,
       action: "quick_item_created",
       summary: `Quick item created for ${channel.name}`,
-      metadata: { channelId, channelName: channel.name, date: date.toISOString(), assetLink },
+      metadata: {
+        channelId: channel.id,
+        channelName: channel.name,
+        date: `${input.date.getFullYear()}-${String(input.date.getMonth() + 1).padStart(2, "0")}-${String(input.date.getDate()).padStart(2, "0")}`,
+        assetLink: input.assetLink ?? undefined,
+        ownerId: owner?.id ?? undefined,
+        ownerName: owner?.name ?? undefined,
+      },
     },
     user,
   );
@@ -118,6 +153,8 @@ export async function createQuickItem(fd: FormData) {
   revalidatePath("/calendar");
   revalidatePath("/requests");
   revalidatePath("/guardrails");
+
+  redirect(`/outputs/${channel.key}?created=${request.id}`);
 }
 
 /**
