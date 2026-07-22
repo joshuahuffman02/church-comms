@@ -8,7 +8,6 @@ import {
   ChevronDown,
   CircleDashed,
   Download,
-  FileText,
   ListVideo,
   Mail,
   Megaphone,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useState } from "react";
 import { CheckCircle2, Plus, Save } from "lucide-react";
 import { createChannel, type ChannelActionState } from "@/actions/channels";
 import { tierLabel } from "@/lib/labels";
@@ -19,14 +19,14 @@ const initialState: ChannelActionState = { ok: false };
 
 export function ChannelCreateForm() {
   const [state, action, pending] = useActionState(createChannel, initialState);
-  const [type, setType] = useState("windowed");
-  const formRef = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    if (!state.ok || !state.savedAt) return;
-    formRef.current?.reset();
-    setType("windowed");
-  }, [state.ok, state.savedAt]);
+  const [typeSelection, setTypeSelection] = useState({
+    afterSavedAt: undefined as number | undefined,
+    value: "windowed",
+  });
+  const type =
+    state.ok && state.savedAt && typeSelection.afterSavedAt !== state.savedAt
+      ? "windowed"
+      : typeSelection.value;
 
   return (
     <details className="card-float group overflow-hidden">
@@ -49,7 +49,7 @@ export function ChannelCreateForm() {
           A new channel starts active. Saving it immediately rebuilds eligible upcoming events so the new channel appears without a manual sync.
         </div>
 
-        <form ref={formRef} action={action} className="grid gap-6">
+        <form key={state.savedAt ?? "new"} action={action} className="grid gap-6">
           <section>
             <h3 className="text-sm font-extrabold text-ink">Channel identity</h3>
             <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_8rem]">
@@ -59,7 +59,17 @@ export function ChannelCreateForm() {
               </label>
               <label className="grid gap-1.5 text-sm font-semibold text-ink">
                 How it appears
-                <select name="type" value={type} onChange={(event) => setType(event.target.value)} className="min-h-11 rounded-2xl border px-3 py-2 font-normal">
+                <select
+                  name="type"
+                  value={type}
+                  onChange={(event) =>
+                    setTypeSelection({
+                      afterSavedAt: state.savedAt,
+                      value: event.target.value,
+                    })
+                  }
+                  className="min-h-11 rounded-2xl border px-3 py-2 font-normal"
+                >
                   <option value="windowed">Runs over a span of days</option>
                   <option value="single_weekday">Once, on a set weekday</option>
                   <option value="dated_instance">Happens once on a date</option>
