@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { weekRange, comingSunday } from "@/lib/week";
-import { addDays } from "@/lib/engine/dates";
+import { addDays, parseDateInput } from "@/lib/engine/dates";
 import { PROMOTABLE_REQUEST_STATUSES } from "@/lib/status";
 import { loadAnnouncementVideoLineup } from "@/lib/announcement-video";
 
@@ -41,6 +41,12 @@ export function ymd(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Resolve an optional YYYY-MM-DD query value to the Sunday it belongs to. */
+export function exportSundayFromParam(value: string | null | undefined, fallback: Date): Date {
+  const parsed = value ? parseDateInput(value) : null;
+  return comingSunday(parsed ?? fallback);
 }
 
 export type LoopItem = {

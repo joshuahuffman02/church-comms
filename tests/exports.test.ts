@@ -4,6 +4,7 @@ import {
   buildBulletinCopy,
   buildVideoRunOfShow,
   buildVideoScript,
+  exportSundayFromParam,
   type LoopItem,
   type BulletinItem,
   type VideoItem,
@@ -68,6 +69,23 @@ describe("buildLoopList", () => {
     );
     const slide = out.split("\n").filter(Boolean)[1];
     expect(slide).toBe("1. line one line two");
+  });
+});
+
+describe("exportSundayFromParam", () => {
+  it("uses the selected Sunday when the query is valid", () => {
+    const selected = exportSundayFromParam("2026-08-02", new Date(2026, 6, 22));
+    expect(selected.getFullYear()).toBe(2026);
+    expect(selected.getMonth()).toBe(7);
+    expect(selected.getDate()).toBe(2);
+  });
+
+  it("normalizes a weekday to its coming Sunday", () => {
+    expect(exportSundayFromParam("2026-07-29", new Date(2026, 6, 22)).getDate()).toBe(2);
+  });
+
+  it("falls back safely when the query is invalid", () => {
+    expect(exportSundayFromParam("not-a-date", new Date(2026, 6, 22)).getDate()).toBe(26);
   });
 });
 
