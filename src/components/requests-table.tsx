@@ -548,7 +548,7 @@ export function RequestsTable({ rows, initialFilters = DEFAULT_FILTERS, canEdit 
         </div>
         {canEdit && (
           <div className="flex flex-wrap gap-2">
-            <Link href="/import/planning-center" className="inline-flex min-h-11 items-center rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-semibold text-ink hover:bg-white">Import events</Link>
+            <Link href="/imports?source=planning-center" className="inline-flex min-h-11 items-center rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-semibold text-ink hover:bg-white">Import events</Link>
             <Link href="/requests/new" className="btn-primary inline-flex min-h-11 items-center rounded-full px-5 py-2 text-sm font-semibold">Add event</Link>
           </div>
         )}

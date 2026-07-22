@@ -33,7 +33,7 @@ function revalidateLinkSurfaces(requestId: string) {
   revalidatePath("/outputs");
   revalidatePath("/guardrails");
   revalidatePath("/assign");
-  revalidatePath("/import/planning-center");
+  revalidatePath("/imports");
 }
 
 /**

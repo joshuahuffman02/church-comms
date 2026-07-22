@@ -95,6 +95,15 @@ describe("recommendGoogleImportCandidate", () => {
       }).recommendation,
     ).toBe("review");
   });
+
+  it("keeps unfamiliar calendar events in review instead of guessing accept", () => {
+    expect(
+      recommendGoogleImportCandidate(ev("governance", { title: "Governance Board Interview" }), "missing", {
+        acceptedTitles: new Set(),
+        ignoredTitles: new Set(),
+      }).recommendation,
+    ).toBe("review");
+  });
 });
 
 describe("intake ripening checklist", () => {

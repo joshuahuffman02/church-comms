@@ -15,7 +15,7 @@ export function WelcomeCard({ admin, editor }: { admin: boolean; editor: boolean
 
   const steps: Step[] = [
     { href: "/requests/new", icon: "➕", label: "Add your first event", show: editor },
-    { href: "/import/planning-center", icon: "🗓️", label: "Connect Planning Center", show: admin },
+    { href: "/imports?source=planning-center", icon: "🗓️", label: "Review imports", show: admin },
     { href: "/settings/channels", icon: "📣", label: "Review your channels", show: admin },
     { href: "/settings/users", icon: "👥", label: "Add your team", show: admin },
     { href: "/help", icon: "📖", label: "Read the 2-minute how-to", show: true },

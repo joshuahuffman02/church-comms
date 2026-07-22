@@ -54,9 +54,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Setup",
     items: [
-      { href: "/import/planning-center", label: "Import from Planning Center", icon: "🗓️", adminOnly: true },
-      { href: "/import/google", label: "Import from Google", icon: "📆", adminOnly: true, badge: "calendar" },
-      { href: "/import/ical", label: "Import a calendar (.ics)", icon: "📥", adminOnly: true },
+      { href: "/imports", label: "Imports", icon: "📥", adminOnly: true, badge: "calendar" },
       { href: "/settings", label: "Settings", icon: "⚙️", adminOnly: true },
       { href: "/help", label: "Help & how-to", icon: "📖", exact: true },
     ],

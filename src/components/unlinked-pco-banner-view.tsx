@@ -22,7 +22,7 @@ export function UnlinkedPcoBannerView({ count }: { count: number }) {
         </span>{" "}
         — they have no local event here.{" "}
         <Link
-          href="/import/planning-center"
+          href="/imports?source=planning-center"
           className="font-semibold underline underline-offset-2"
         >
           Review &amp; import on the Import (PCO) page →

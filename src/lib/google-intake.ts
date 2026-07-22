@@ -278,7 +278,10 @@ export function recommendGoogleImportCandidate(
   if (history.acceptedTitles.has(title)) {
     return { recommendation: "accept", reason: "Similar calendar items have been accepted before." };
   }
-  return { recommendation: "accept", reason: "New calendar event with no close match in Church Comms." };
+  return {
+    recommendation: "review",
+    reason: "New calendar event with no close match. A person should decide whether it belongs in Church Comms.",
+  };
 }
 
 export type GoogleSyncResult = {

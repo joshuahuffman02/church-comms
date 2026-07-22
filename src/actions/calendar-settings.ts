@@ -7,8 +7,9 @@ import { normalizeExternalCalendarInput } from "@/lib/calendar-settings";
 
 export async function saveExternalCalendarUrl(fd: FormData): Promise<void> {
   await requireAdmin();
-  const externalCalendarUrl =
-    fd.get("intent") === "clear" ? null : normalizeExternalCalendarInput(fd.get("externalCalendarUrl"));
+  const clearing = fd.get("intent") === "clear";
+  const externalCalendarUrl = clearing ? null : normalizeExternalCalendarInput(fd.get("externalCalendarUrl"));
+  if (!clearing && !externalCalendarUrl) throw new Error("Enter a calendar feed address.");
 
   await db.setting.upsert({
     where: { id: 1 },
@@ -17,6 +18,7 @@ export async function saveExternalCalendarUrl(fd: FormData): Promise<void> {
   });
 
   revalidatePath("/settings/connections");
+  revalidatePath("/imports");
   revalidatePath("/import/google");
   revalidatePath("/import/ical");
   revalidatePath("/import/planning-center");

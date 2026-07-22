@@ -245,12 +245,17 @@ async function upsertPcoEvent(
  * an unapproved/expired id simply imports nothing rather than fabricating a
  * Request. Each event is upserted via {@link upsertPcoEvent}.
  *
- * Returns the number of Requests created. Auth-guarded.
+ * Returns an explicit completion summary so the review inbox can distinguish
+ * brand-new imports from refreshed Planning Center details. Auth-guarded.
  */
-export async function importPcoEvents(pcoEventIds: string[]): Promise<number> {
+export async function importPcoEvents(pcoEventIds: string[]): Promise<{
+  created: number;
+  updated: number;
+  skipped: number;
+}> {
   const user = await requireAdmin();
 
-  if (pcoEventIds.length === 0) return 0;
+  if (pcoEventIds.length === 0) return { created: 0, updated: 0, skipped: 0 };
 
   // Pull the live APPROVED upcoming events and keep only the selected ones.
   const approved = await fetchApprovedUpcomingPcoEvents();
@@ -264,10 +269,12 @@ export async function importPcoEvents(pcoEventIds: string[]): Promise<number> {
   const rules = await loadTagRules();
 
   let created = 0;
+  let updated = 0;
   for (const e of selected) {
     const extras = await enrichPcoEvent(e, personCache, roomStatusCache);
     const r = await upsertPcoEvent(e, extras, rules);
     if (r.created) created++;
+    else updated++;
     await logRequestActivity(
       {
         requestId: r.id,
@@ -286,8 +293,9 @@ export async function importPcoEvents(pcoEventIds: string[]): Promise<number> {
   }
 
   revalidatePath("/requests");
+  revalidatePath("/imports");
   revalidatePath("/import/planning-center");
-  return created;
+  return { created, updated, skipped: pcoEventIds.length - selected.length };
 }
 
 /**
@@ -375,6 +383,7 @@ export async function syncApprovedPcoEvents(): Promise<{
   if (created > 0 || updated > 0) {
     for (const path of [
       "/requests",
+      "/imports",
       "/import/planning-center",
       "/calendar",
       "/this-week",
