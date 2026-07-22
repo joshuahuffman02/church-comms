@@ -43,7 +43,7 @@ const SECTIONS: Section[] = [
     heading: "Make & send",
     items: [
       { href: "/pipeline", label: "Production", icon: "🗂️" },
-      { href: "/assign", label: "Assign", icon: "🧲" },
+      { href: "/assign", label: "Channel plan", icon: "🧲" },
       { href: "/exports", label: "Downloads", icon: "⬇️" },
     ],
   },

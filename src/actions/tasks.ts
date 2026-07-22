@@ -29,6 +29,9 @@ function revalidateTaskSurfaces(requestId: string) {
   revalidatePath(`/requests/${requestId}`);
   revalidatePath("/my-tasks");
   revalidatePath("/this-week");
+  revalidatePath("/pipeline");
+  revalidatePath("/calendar");
+  revalidatePath("/outputs");
 }
 
 // ---------------------------------------------------------------------------

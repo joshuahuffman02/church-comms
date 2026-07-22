@@ -42,12 +42,12 @@ export const DELIVERABLE_STATUSES = [
 ] as const;
 export type DeliverableStatus = (typeof DELIVERABLE_STATUSES)[number];
 export const DELIVERABLE_STATUS_META: Record<string, { label: string; color: string }> = {
-  to_design:   { label: "To design",   color: "#94a3b8" },
+  to_design:   { label: "Not started", color: "#94a3b8" },
   in_progress: { label: "In progress", color: "#fb923c" },
-  proof:       { label: "Proof",       color: "#fbbf24" },
-  ready:       { label: "Ready",       color: "#34d399" },
+  proof:       { label: "Needs review", color: "#fbbf24" },
+  ready:       { label: "Ready to use", color: "#34d399" },
   scheduled:   { label: "Scheduled",   color: "#38bdf8" },
-  published:   { label: "Published",   color: "#10b981" },
+  published:   { label: "Complete",    color: "#10b981" },
   skipped:     { label: "Skipped",     color: "#cbd5e1" },
 };
 // linear non-skipped progression for the "advance" toggle:

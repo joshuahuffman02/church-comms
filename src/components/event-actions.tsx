@@ -3,7 +3,7 @@ import { useTransition } from "react";
 import { cancelEvent, deleteEvent } from "@/actions/events";
 
 /** Event-level destructive controls: cancel (keeps the record) or delete. */
-export function EventActions({ id, status }: { id: string; status: string }) {
+export function EventActions({ id, status, eventTitle }: { id: string; status: string; eventTitle: string }) {
   const [pending, startTransition] = useTransition();
   const isCancelled = status === "cancelled";
 
@@ -12,14 +12,16 @@ export function EventActions({ id, status }: { id: string; status: string }) {
       <button
         disabled={pending || isCancelled}
         onClick={() => {
-          if (window.confirm("Cancel this event? Its scheduled items will be removed.")) {
+          if (window.confirm(
+            `Cancel ${eventTitle}?\n\nThis cancels the whole event and removes every scheduled channel appearance. To stop only one output, skip that piece below instead.`,
+          )) {
             startTransition(() => cancelEvent(id));
           }
         }}
         className="rounded-full border px-3 py-1 text-xs font-semibold text-muted hover:bg-sky-bg transition disabled:opacity-40"
-        title={isCancelled ? "Already cancelled" : "Cancel event"}
+        title={isCancelled ? "Already cancelled" : `Cancel the whole ${eventTitle} event`}
       >
-        {isCancelled ? "Cancelled" : "Cancel event"}
+        {isCancelled ? "Cancelled" : "Cancel whole event"}
       </button>
       <button
         disabled={pending}

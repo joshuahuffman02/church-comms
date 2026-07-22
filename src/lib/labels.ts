@@ -27,6 +27,31 @@ export function prettyChannel(key: string): string {
   return titleCase(key);
 }
 
+/**
+ * Name the actual thing a person is making instead of exposing the internal
+ * "deliverable" term. Channel names describe where work appears; these labels
+ * describe the work itself and are used beside owner and status controls.
+ */
+export function channelWorkLabel(channelName: string): string {
+  const cleanName = channelName.replace(/\s*\(Top 3\)$/i, "").trim();
+  const normalized = cleanName.toLowerCase();
+
+  if (normalized.includes("announcement video")) return "Video announcement segment";
+  if (normalized === "sunday loop" || normalized.includes("loop")) return "Sunday Loop slide";
+  if (normalized === "church app" || normalized === "app") return "Church App announcement";
+  if (normalized.includes("facebook")) return "Facebook post";
+  if (normalized.includes("instagram")) return "Instagram post";
+  if (normalized.includes("website") || normalized === "web") return "Website update";
+  if (normalized.includes("email")) return `${cleanName} item`;
+  if (normalized.includes("restroom") && normalized.includes("sign")) return "Restroom sign";
+  if (normalized.includes("bulletin") && normalized.includes("insert")) return "Bulletin insert";
+  if (normalized.includes("opportunities table")) return "Opportunities Table display";
+  if (normalized.includes("banner")) return "Outdoor banner";
+  if (normalized.includes("stage")) return "Stage announcement";
+
+  return `${cleanName} piece`;
+}
+
 /** Generic slug humanizer: "board_approval" / "board-approval" -> "Board Approval". */
 export function titleCase(slug: string): string {
   return slug

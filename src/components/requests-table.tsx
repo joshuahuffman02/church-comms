@@ -167,7 +167,7 @@ function EventRow({ row, todayMs, duplicate = false }: { row: RequestRow; todayM
         <div className="shrink-0 text-right text-xs text-muted">
           <p>{row.plannedChannelCount} {row.plannedChannelCount === 1 ? "channel" : "channels"} planned</p>
           <p className={row.ownerName ? "mt-1" : "mt-1 font-semibold text-amber-800"}>
-            {row.ownerName ? `Owner: ${row.ownerName}` : "Owner unassigned"}
+            {row.ownerName ? `Event owner: ${row.ownerName}` : "Event owner unassigned"}
           </p>
           <p className="mt-2 font-semibold text-sky-700">Open event →</p>
         </div>

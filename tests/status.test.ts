@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { nextRequestStatus, prevRequestStatus, nextDeliverableStatus } from "../src/lib/status";
+import {
+  DELIVERABLE_STATUS_META,
+  nextRequestStatus,
+  prevRequestStatus,
+  nextDeliverableStatus,
+} from "../src/lib/status";
 describe("status", () => {
   it("advances request statuses and stops at the end", () => {
     expect(nextRequestStatus("submitted")).toBe("triaged");
@@ -11,5 +16,10 @@ describe("status", () => {
     expect(nextDeliverableStatus("to_design")).toBe("in_progress");
     expect(nextDeliverableStatus("ready")).toBe("published");
     expect(nextDeliverableStatus("published")).toBe(null);
+  });
+  it("uses channel-neutral language for production work", () => {
+    expect(DELIVERABLE_STATUS_META.to_design.label).toBe("Not started");
+    expect(DELIVERABLE_STATUS_META.proof.label).toBe("Needs review");
+    expect(DELIVERABLE_STATUS_META.published.label).toBe("Complete");
   });
 });

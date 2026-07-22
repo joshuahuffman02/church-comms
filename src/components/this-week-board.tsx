@@ -6,7 +6,7 @@ import { StandingTaskDoneButton } from "@/components/standing-task-done-button";
 import { Top3Controls, Top3UnpinButton } from "@/components/top3-controls";
 import { KIND_LABEL } from "@/lib/updates";
 import { initials } from "@/lib/tasks";
-import { titleCase, taskSourceLabel } from "@/lib/labels";
+import { channelWorkLabel, titleCase, taskSourceLabel } from "@/lib/labels";
 import { DELIVERABLE_STATUS_META } from "@/lib/status";
 
 type Row = {
@@ -42,8 +42,8 @@ function CardHeading({ id, title, count, hint }: { id: string; title: string; co
 function OwnerBadge({ name }: { name: string }) {
   return (
     <span
-      aria-label={`Owner: ${name}`}
-      title={`Owner: ${name}`}
+      aria-label={`Piece owner: ${name}`}
+      title={`Piece owner: ${name}`}
       className="grid h-7 min-w-7 place-items-center rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600"
     >
       {initials(name)}
@@ -91,12 +91,12 @@ function WorkSection({
               <ul className="grid gap-2">
                 {group.map((row) => {
                   const statusMeta = DELIVERABLE_STATUS_META[row.status] ?? { label: titleCase(row.status), color: "#64748b" };
-                  const controlLabel = `${row.request.title}, ${row.channel.name}`;
+                  const workLabel = channelWorkLabel(row.channel.name);
                   return (
                     <li key={row.id} className="flex flex-col gap-2 rounded-xl bg-slate-50/70 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 items-center gap-2">
                         <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: row.channel.color }} />
-                        <span className="font-medium">{row.channel.name}</span>
+                        <span className="font-medium">{workLabel}</span>
                         <span className="text-xs text-muted">
                           {kind === "video"
                             ? `due ${fmt(row.productionDueAt)} · airs ${fmt(row.instanceDate)}`
@@ -105,7 +105,12 @@ function WorkSection({
                       </div>
                       {kind !== "video" && (
                         canEdit ? (
-                          <DeliverableStatusButton id={row.id} status={row.status} label={controlLabel} />
+                          <DeliverableStatusButton
+                            id={row.id}
+                            status={row.status}
+                            workLabel={workLabel}
+                            eventTitle={row.request.title}
+                          />
                         ) : (
                           <span
                             className="w-fit rounded-full border px-3 py-1 text-xs font-semibold"

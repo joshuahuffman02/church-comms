@@ -13,10 +13,11 @@ import {
 } from "@dnd-kit/core";
 import { setDeliverableStatus } from "@/actions/request-status";
 import { assignDeliverableOwner } from "@/actions/tasks";
+import { DeliverableStatusButton } from "@/components/deliverable-status-button";
 import { DELIVERABLE_STATUS_META } from "@/lib/status";
 import { MinistryDots, type MinistryDot } from "@/components/ministry-dots";
 import type { ActiveUser } from "@/components/owner-assign";
-import { tierLabel, tierTitle } from "@/lib/labels";
+import { channelWorkLabel, tierLabel, tierTitle } from "@/lib/labels";
 import { focusProductionItems } from "@/lib/production";
 import { atMidnight } from "@/lib/engine/dates";
 
@@ -134,22 +135,26 @@ function ProductionOwnerSelect({
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   const value = card.explicitOwner ? card.ownerId ?? EVENT_OWNER : EVENT_OWNER;
+  const workLabel = channelWorkLabel(card.channelName);
   return (
-    <select
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onAssign(card, event.target.value === EVENT_OWNER ? null : event.target.value)}
-      aria-label={`Assign ${card.title}, ${card.channelName}`}
-      title={card.explicitOwner ? "This channel has its own owner" : "Using the event owner"}
-      className="min-h-11 max-w-48 rounded-full border px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-    >
-      <option value={EVENT_OWNER}>
-        {card.eventOwnerName ? `Event owner: ${card.eventOwnerName}` : "Unassigned"}
-      </option>
-      {users.map((user) => (
-        <option key={user.id} value={user.id}>{user.name}</option>
-      ))}
-    </select>
+    <label className="inline-flex items-center gap-1.5">
+      <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Piece owner</span>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onAssign(card, event.target.value === EVENT_OWNER ? null : event.target.value)}
+        aria-label={`Choose the owner of the ${workLabel} for ${card.title}`}
+        title={`This assignment applies only to the ${workLabel}, not the whole event`}
+        className="min-h-11 max-w-52 rounded-full border px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
+      >
+        <option value={EVENT_OWNER}>
+          {card.eventOwnerName ? `Use event owner: ${card.eventOwnerName}` : "No piece owner"}
+        </option>
+        {users.map((user) => (
+          <option key={user.id} value={user.id}>{user.name}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -167,40 +172,38 @@ function ProductionRow({
   canEdit: boolean;
   users: ActiveUser[];
   saving: boolean;
-  onMove: (id: string, status: string) => void;
+  onMove: (id: string, status: string, skippedReason?: string) => Promise<void>;
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   const due = dueLabel(card.productionDueAtMs, todayMs);
+  const workLabel = channelWorkLabel(card.channelName);
   return (
     <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: card.channelColor }} />
-          <span className="font-semibold text-ink">{card.channelName.replace(/\s*\(Top 3\)$/i, "")}</span>
+          <span className="font-semibold text-ink">{workLabel}</span>
           <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${due.className}`}>{due.text}</span>
           {card.nextScheduledAtMs != null && (
             <span className="text-xs font-medium text-muted">Goes out {fmt(card.nextScheduledAtMs)}</span>
           )}
         </div>
+        <p className="mt-1 text-xs text-muted">Channel: {card.channelName.replace(/\s*\(Top 3\)$/i, "")}</p>
         {!canEdit && (
-          <p className="mt-1 text-xs text-muted">{card.ownerName ? `Owned by ${card.ownerName}` : "Unassigned"}</p>
+          <p className="mt-1 text-xs text-muted">{card.ownerName ? `Piece owner: ${card.ownerName}` : "No piece owner"}</p>
         )}
       </div>
       {canEdit && (
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <ProductionOwnerSelect card={card} users={users} disabled={saving} onAssign={onAssign} />
-          <select
-            value={card.status}
+          <DeliverableStatusButton
+            id={card.id}
+            status={card.status}
+            workLabel={workLabel}
+            eventTitle={card.title}
             disabled={saving}
-            onChange={(event) => onMove(card.id, event.target.value)}
-            aria-label={`Change status for ${card.title}, ${card.channelName}`}
-            className="min-h-11 rounded-full border px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-          >
-            {BOARD_COLUMNS.map((status) => (
-              <option key={status} value={status}>{DELIVERABLE_STATUS_META[status]?.label ?? status}</option>
-            ))}
-            <option value="skipped">Skipped</option>
-          </select>
+            onStatusChange={(status, skippedReason) => onMove(card.id, status, skippedReason)}
+          />
         </div>
       )}
     </div>
@@ -221,7 +224,7 @@ function EventTaskGroup({
   canEdit: boolean;
   users: ActiveUser[];
   savingIds: Set<string>;
-  onMove: (id: string, status: string) => void;
+  onMove: (id: string, status: string, skippedReason?: string) => Promise<void>;
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   return (
@@ -289,7 +292,7 @@ function ProductionSection({
   canEdit: boolean;
   users: ActiveUser[];
   savingIds: Set<string>;
-  onMove: (id: string, status: string) => void;
+  onMove: (id: string, status: string, skippedReason?: string) => Promise<void>;
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -360,11 +363,12 @@ function BoardCard({
   canEdit: boolean;
   users: ActiveUser[];
   saving: boolean;
-  onMove: (id: string, status: string) => void;
+  onMove: (id: string, status: string, skippedReason?: string) => Promise<void>;
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: card.id, disabled: !canEdit });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+  const workLabel = channelWorkLabel(card.channelName);
   return (
     <div
       ref={setNodeRef}
@@ -378,7 +382,7 @@ function BoardCard({
         </div>
         <div className="mt-2 flex items-center gap-2 text-xs">
           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: card.channelColor }} />
-          <span className="font-semibold" style={{ color: card.channelColor }}>{card.channelName}</span>
+          <span className="font-semibold" style={{ color: card.channelColor }}>{workLabel}</span>
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
@@ -390,17 +394,14 @@ function BoardCard({
       {canEdit && (
         <div className="mt-3 grid gap-2" onPointerDown={(event) => event.stopPropagation()}>
           <ProductionOwnerSelect card={card} users={users} disabled={saving} onAssign={onAssign} />
-          <select
-            value={card.status}
+          <DeliverableStatusButton
+            id={card.id}
+            status={card.status}
+            workLabel={workLabel}
+            eventTitle={card.title}
             disabled={saving}
-            onChange={(event) => onMove(card.id, event.target.value)}
-            aria-label={`Move ${card.title}, ${card.channelName} to another status`}
-            className="min-h-11 w-full rounded-full border px-3 py-2 text-xs font-semibold text-ink disabled:opacity-50"
-          >
-            {BOARD_COLUMNS.map((status) => (
-              <option key={status} value={status}>{DELIVERABLE_STATUS_META[status]?.label ?? status}</option>
-            ))}
-          </select>
+            onStatusChange={(status, skippedReason) => onMove(card.id, status, skippedReason)}
+          />
         </div>
       )}
     </div>
@@ -421,7 +422,7 @@ function BoardColumn({
   canEdit: boolean;
   users: ActiveUser[];
   savingIds: Set<string>;
-  onMove: (id: string, status: string) => void;
+  onMove: (id: string, status: string, skippedReason?: string) => Promise<void>;
   onAssign: (card: DeliverableCard, ownerId: string | null) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
@@ -590,26 +591,25 @@ export function PipelineBoard({
     });
   }
 
-  function moveCard(id: string, targetStatus: string) {
+  async function moveCard(id: string, targetStatus: string, skippedReason?: string): Promise<void> {
     if (!canEdit) return;
     const original = items.find((card) => card.id === id);
     if (!original || original.status === targetStatus) return;
     setSaveError(null);
     setSaving(id, true);
     setItems((previous) => previous.map((card) => card.id === id ? { ...card, status: targetStatus } : card));
-    startTransition(async () => {
-      try {
-        await setDeliverableStatus(id, targetStatus);
-        if (targetStatus === "published" || targetStatus === "skipped") {
-          setItems((previous) => previous.filter((card) => card.id !== id));
-        }
-      } catch {
-        setItems((previous) => previous.map((card) => card.id === id ? original : card));
-        setSaveError(`Could not move ${original.title}. Try again.`);
-      } finally {
-        setSaving(id, false);
+    try {
+      await setDeliverableStatus(id, targetStatus, skippedReason);
+      if (targetStatus === "published" || targetStatus === "skipped") {
+        setItems((previous) => previous.filter((card) => card.id !== id));
       }
-    });
+    } catch (error) {
+      setItems((previous) => previous.map((card) => card.id === id ? original : card));
+      setSaveError(`Could not update the ${channelWorkLabel(original.channelName)} for ${original.title}. Try again.`);
+      throw error;
+    } finally {
+      setSaving(id, false);
+    }
   }
 
   function assignOwner(card: DeliverableCard, explicitOwnerId: string | null) {
@@ -642,7 +642,7 @@ export function PipelineBoard({
 
   function handleDragEnd(event: DragEndEvent) {
     if (!event.over) return;
-    moveCard(String(event.active.id), String(event.over.id));
+    void moveCard(String(event.active.id), String(event.over.id));
   }
 
   const sectionProps = { todayMs, canEdit, users, savingIds, onMove: moveCard, onAssign: assignOwner };
@@ -666,7 +666,7 @@ export function PipelineBoard({
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Needs attention" value={focus.actionTotal} detail={filtered ? "Matching filters" : "Now through Sunday"} tone="rose" />
-          <SummaryCard label="Unassigned" value={focus.unassignedActionTotal} detail="Inside this focus" tone="amber" />
+          <SummaryCard label="No piece owner" value={focus.unassignedActionTotal} detail="Inside this focus" tone="amber" />
           <SummaryCard label="Proof review" value={focus.proof.length} detail="Waiting for a decision" tone="violet" />
           <SummaryCard label="Current queue" value={visible.length} detail={filtered ? `of ${items.length} matching` : "Non-expired pieces"} tone="sky" />
         </div>
@@ -716,7 +716,7 @@ export function PipelineBoard({
           </select>
           <select value={filters.owner} onChange={(event) => updateFilter("owner", event.target.value)} aria-label="Filter by owner" className="min-h-11 rounded-full border px-4 py-2 text-sm">
             <option value="">All owners</option>
-            <option value={UNASSIGNED}>Unassigned</option>
+            <option value={UNASSIGNED}>No piece owner</option>
             {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
           </select>
           <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)} aria-label="Filter by status" className="min-h-11 rounded-full border px-4 py-2 text-sm">
