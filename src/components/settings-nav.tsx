@@ -19,11 +19,12 @@ const LINKS = [
 export function SettingsNav() {
   const path = usePathname();
   return (
-    <div className="no-print mb-5">
-      <Link href="/settings" className="text-sm font-semibold text-muted hover:text-ink">
+    <nav className="no-print mb-5" aria-label="Settings sections">
+      <Link href="/settings" className="inline-flex min-h-10 items-center text-sm font-semibold text-muted hover:text-ink">
         ← All settings
       </Link>
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="-mx-1 mt-1 overflow-x-auto px-1 pb-2">
+        <div className="flex w-max min-w-full gap-1.5">
         {LINKS.map((l) => {
           const active = path === l.href;
           return (
@@ -31,7 +32,7 @@ export function SettingsNav() {
               key={l.href}
               href={l.href}
               aria-current={active ? "page" : undefined}
-              className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              className={`inline-flex min-h-9 shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 active ? "bg-ink text-white" : "text-muted hover:bg-sky-bg"
               }`}
             >
@@ -39,7 +40,8 @@ export function SettingsNav() {
             </Link>
           );
         })}
+        </div>
       </div>
-    </div>
+    </nav>
   );
 }
