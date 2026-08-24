@@ -35,6 +35,9 @@ import {
   STANDARD_MULTI_WEEK,
 } from "@/lib/schedule-presets";
 import Link from "next/link";
+import { EventReadiness } from "@/components/event-readiness";
+import { EventCopyStarters } from "@/components/event-copy-starters";
+import { requestReadiness } from "@/lib/smart-workflow";
 
 const APPROVAL_STATUS_META: Record<string, { label: string; cls: string }> = {
   pending: { label: "Pending", cls: "bg-amber-100 text-amber-700" },
@@ -231,6 +234,34 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
     label: a.filename,
     isFinal: a.isFinal,
   }));
+  const plannedCopyChannels = Array.from(
+    new Map(
+      request.deliverables
+        .filter((deliverable) => deliverable.status !== "skipped")
+        .map((deliverable) => [
+          deliverable.channel.key,
+          {
+            key: deliverable.channel.key,
+            name: deliverable.channel.name,
+            color: deliverable.channel.color,
+          },
+        ]),
+    ).values(),
+  );
+  const readiness = requestReadiness({
+    status: request.status,
+    description: request.description,
+    nextStepText: request.nextStepText,
+    ownerId: request.ownerId,
+    noPromo: request.noPromo,
+    approvals: request.approvals.map((approval) => ({ status: approval.status })),
+    pieces: request.deliverables.map((deliverable) => ({
+      status: deliverable.status,
+      ownerId: deliverable.ownerId ?? request.ownerId,
+    })),
+    guardrailCount: guardrails.filter((guardrail) => guardrail.severity !== "info").length,
+    hasFinalAsset: request.assets.some((asset) => asset.isFinal),
+  });
 
   // Promotion timeline: all touches across deliverables sorted by date. Each
   // row carries its per-week content so it can expand into an inline editor.
@@ -285,7 +316,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
   return (
     <div className="max-w-4xl">
       {/* Header */}
-      <div className="card-float p-6 mb-4">
+      <div id="event-overview" className="card-float scroll-mt-4 p-6 mb-4">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           {request.ministries.length > 0 && (
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
@@ -348,6 +379,16 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
           </Link>
         )}
         {request.description && <p className="text-muted mt-1">{request.description}</p>}
+        {request.requesterNotes && (
+          <div className="mt-3 rounded-2xl border border-violet-100 bg-violet-50/70 px-4 py-3 text-sm">
+            <p className="text-xs font-extrabold uppercase tracking-wide text-violet-700">
+              Note from requester
+            </p>
+            <p className="mt-1 whitespace-pre-wrap leading-relaxed text-ink">
+              {request.requesterNotes}
+            </p>
+          </div>
+        )}
         <div className="mt-3 grid gap-1 text-sm text-muted sm:grid-cols-2">
           <div>📅 {eventLine || "—"}</div>
           {request.location && <div>📍 {request.location}</div>}
@@ -361,6 +402,19 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
             </div>
           )}
           {request.nextStepText && <div>👉 {request.nextStepText}</div>}
+          {request.nextStepUrl && (
+            <div>
+              🔗{" "}
+              <a
+                href={request.nextStepUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-sky-700 underline"
+              >
+                Open next-step link
+              </a>
+            </div>
+          )}
           {registrationCloseLine && <div>📝 Signups close {registrationCloseLine}</div>}
           {registrationCloseLine && (
             <div>📣 Ad schedule runs back from signup close</div>
@@ -385,7 +439,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         </div>
 
         {/* Overall owner coordinates the event; individual outputs can override below. */}
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-100 px-4 py-3 text-sm">
+        <div id="event-owner" className="mt-3 flex scroll-mt-4 flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border border-slate-100 px-4 py-3 text-sm">
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-ink">👤 Overall event owner</p>
             <p className="mt-0.5 text-xs text-muted">
@@ -535,6 +589,8 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
         )}
       </div>
 
+      <EventReadiness readiness={readiness} />
+
       {/* Awaiting approval: pending approvals while still pre-approved */}
       {awaitingApproval && (
         <div className="card-float p-4 mb-4 bg-amber-50 border border-amber-200 flex items-center gap-3">
@@ -548,18 +604,20 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
 
       {/* Heads-up: guardrails involving this request */}
       {guardrails.length > 0 && (
-        <div className="card-float p-5 mb-4 bg-amber-50/40">
+        <div id="heads-up" className="card-float mb-4 scroll-mt-4 bg-amber-50/40 p-5">
           <h2 className="font-bold mb-3">⚠️ Heads-up</h2>
           <GuardrailList guardrails={guardrails} />
         </div>
       )}
 
       {/* Status pipeline + actions */}
-      <StatusPipeline id={request.id} status={request.status} eventTitle={request.title} canEdit={canEdit} />
+      <section id="status" className="scroll-mt-4">
+        <StatusPipeline id={request.id} status={request.status} eventTitle={request.title} canEdit={canEdit} />
+      </section>
 
       {/* Approvals */}
       {approvals.length > 0 && (
-        <div className="card-float p-5 mb-4">
+        <div id="approvals" className="card-float mb-4 scroll-mt-4 p-5">
           <h2 className="font-bold mb-3">Approvals</h2>
           <div className="grid gap-2">
             {approvals.map((a) => {
@@ -602,13 +660,24 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       )}
 
       {/* Message Arc / Updates: the dated timeline of message phases */}
-      <EventUpdates requestId={request.id} updates={updateRows} channels={channelLite} canEdit={canEdit} />
+      <section id="message-plan" className="scroll-mt-4">
+        <EventUpdates requestId={request.id} updates={updateRows} channels={channelLite} canEdit={canEdit} />
+      </section>
+
+      <EventCopyStarters
+        title={request.title}
+        description={request.description}
+        nextStep={request.nextStepText}
+        channels={plannedCopyChannels}
+      />
 
       {/* Admin Checklist: dated admin tasks from playbooks + manual tasks */}
       <EventTasks requestId={request.id} tasks={taskRows} templates={templateOptions} canEdit={canEdit} />
 
       {/* Channel picker — where this event's promo is going */}
-      <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
+      <div id="channels" className="scroll-mt-4">
+        <ChannelPicker channels={activeChannels} placements={placements} requestId={request.id} canEdit={canEdit} />
+      </div>
       {canEdit && (
         <div className="-mt-2 mb-4 pl-1">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -629,19 +698,23 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       )}
 
       {/* Deliverables */}
-      <DeliverableList
-        rows={rows}
-        users={activeUsers}
-        currentUserId={me?.id ?? ""}
-        eventTitle={request.title}
-        canEdit={canEdit}
-      />
+      <div id="pieces" className="scroll-mt-4">
+        <DeliverableList
+          rows={rows}
+          users={activeUsers}
+          currentUserId={me?.id ?? ""}
+          eventTitle={request.title}
+          canEdit={canEdit}
+        />
+      </div>
 
       {/* Assets / finished art */}
-      <AssetAttach requestId={request.id} assets={assetRows} canEdit={canEdit} />
+      <div id="assets" className="scroll-mt-4">
+        <AssetAttach requestId={request.id} assets={assetRows} canEdit={canEdit} />
+      </div>
 
       {/* Promotion timeline */}
-      <div className="card-float p-5 mb-4">
+      <div id="timeline" className="card-float mb-4 scroll-mt-4 p-5">
         <h2 className="font-bold mb-3">Promotion timeline</h2>
         {timeline.length === 0 ? (
           <p className="text-muted text-sm">Nothing scheduled to post yet.</p>
@@ -675,7 +748,7 @@ export default async function RequestDetail({ params }: { params: Promise<{ id: 
       </div>
 
       {/* Durable history */}
-      <div className="card-float p-5 mb-4">
+      <div id="history" className="card-float mb-4 scroll-mt-4 p-5">
         <h2 className="font-bold mb-3">History</h2>
         {activityRows.length === 0 ? (
           <p className="text-muted text-sm">No logged changes yet.</p>

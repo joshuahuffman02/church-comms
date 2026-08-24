@@ -7,6 +7,10 @@ import { AdminOnlyCard } from "@/components/admin-only-card";
 import { SettingsNav } from "@/components/settings-nav";
 import { PcoTestButton } from "@/components/pco-test-button";
 import { ExternalCalendarUrlForm } from "@/components/external-calendar-url-form";
+import {
+  planningCenterAuthEnabled,
+  planningCenterAuthMissing,
+} from "@/lib/pco-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +95,63 @@ export default async function ConnectionsSettings() {
         </details>
       </div>
 
+      {/* Planning Center staff login */}
+      <div className="card-float p-5 mb-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-bold">👤 Planning Center staff sign-in</h2>
+          <StatusPill
+            ok={planningCenterAuthEnabled}
+            label={planningCenterAuthEnabled ? "Ready" : "Needs setup"}
+          />
+        </div>
+        <p className="text-muted mt-1 text-sm">
+          Lets staff sign in with Planning Center, creates their local requester
+          profile automatically, and gives them a private My Requests history.
+          It does not create a hosted database account.
+        </p>
+        <details className="mt-3 rounded-2xl border bg-violet-50/50 px-4 py-3 text-sm">
+          <summary className="cursor-pointer font-semibold text-ink select-none">
+            OAuth application setup
+          </summary>
+          <ol className="mt-3 grid gap-2 text-muted">
+            <li>
+              1. Create an OAuth application in the{" "}
+              <a
+                href="https://api.planningcenteronline.com/oauth/applications"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-sky-700 underline"
+              >
+                Planning Center developer console
+              </a>
+              .
+            </li>
+            <li>
+              2. Add{" "}
+              <code className="font-mono text-ink">
+                {(process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}
+                /api/auth/callback/planning-center
+              </code>{" "}
+              as an authorization callback.
+            </li>
+            <li>
+              3. Add the following values to <code className="font-mono text-ink">.env</code>{" "}
+              and restart the app.
+            </li>
+          </ol>
+          <div className="mt-3 rounded-xl border bg-white px-4 py-3 font-mono text-xs text-ink">
+            <div>PLANNING_CENTER_OAUTH_CLIENT_ID=...</div>
+            <div>PLANNING_CENTER_OAUTH_CLIENT_SECRET=...</div>
+            <div>PLANNING_CENTER_OAUTH_ORGANIZATION_ID=...</div>
+          </div>
+          {!planningCenterAuthEnabled && (
+            <p className="mt-2 text-xs text-amber-800">
+              Missing: {planningCenterAuthMissing.join(", ")}
+            </p>
+          )}
+        </details>
+      </div>
+
       {/* Google Calendar */}
       <div className="card-float p-5 mb-4">
         <div className="flex items-center justify-between gap-3">
@@ -134,8 +195,8 @@ export default async function ConnectionsSettings() {
           <StatusPill ok={email} />
         </div>
         <p className="text-muted mt-1 text-sm">
-          Sends the &ldquo;got your request&rdquo; and status emails to requesters.
-          Until it&apos;s connected, those emails are skipped (nothing breaks).
+          Optionally sends request and status emails. My Requests works without
+          email, so leaving this disconnected does not prevent staff tracking.
         </p>
         <details className="mt-3 rounded-2xl border bg-sky-bg/40 px-4 py-3 text-sm">
           <summary className="cursor-pointer font-semibold text-ink select-none">

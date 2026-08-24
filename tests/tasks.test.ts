@@ -79,6 +79,10 @@ describe("focusMyTasks", () => {
     status: "to_design",
     productionDueAt: due,
     explicitOwner: false,
+    sourceLabel: "Added here",
+    requesterLabel: "No requester recorded",
+    ownerLabel: "Unassigned",
+    productionNeeds: [],
   });
 
   it("separates older overdue work from the two-week focus window", () => {

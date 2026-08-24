@@ -6,6 +6,11 @@ import { isAdmin, isEditor } from "@/lib/roles";
 import { GOOGLE_ICAL_SOURCE } from "@/lib/google-intake";
 import { NavLink } from "@/components/nav-link";
 import { MobileNav } from "@/components/mobile-nav";
+import { logout } from "@/actions/auth";
+import {
+  CommandPalette,
+  type CommandPaletteItem,
+} from "@/components/command-palette";
 
 type Item = {
   href: string;
@@ -15,6 +20,7 @@ type Item = {
   editorOnly?: boolean;
   exact?: boolean;
   badge?: "guardrails" | "calendar";
+  portal?: boolean;
 };
 type Section = { heading: string; items: Item[] };
 
@@ -25,6 +31,9 @@ const SECTIONS: Section[] = [
   {
     heading: "Today",
     items: [
+      { href: "/", label: "Home", icon: "✨", exact: true },
+      { href: "/my-requests", label: "My Requests", icon: "📣", portal: true },
+      { href: "/submit", label: "New Request", icon: "➕", portal: true },
       { href: "/run-sheet", label: "Sunday Checklist", icon: "🗒️" },
       { href: "/this-week", label: "This Week", icon: "🗓️" },
       { href: "/my-tasks", label: "My Tasks", icon: "✅" },
@@ -65,30 +74,93 @@ const sectionHeading =
   "mt-4 px-3 pb-1 pt-3 text-[11px] font-extrabold uppercase text-muted border-t border-slate-100";
 
 export async function Nav() {
-  const [user, channels, guardrails, calendarImportCount] = await Promise.all([
-    getSessionUser(),
-    db.channel.findMany({
-      where: { active: true },
-      orderBy: { sortOrder: "asc" },
-      select: { key: true, name: true, color: true },
-    }),
-    getGuardrails(new Date()),
-    db.calendarImportCandidate.count({
-      where: { source: GOOGLE_ICAL_SOURCE, status: "pending" },
-    }),
-  ]);
+  const user = await getSessionUser();
   if (!user) return null;
   const admin = isAdmin(user.roles);
   const editor = isEditor(user.roles);
+  const portalOnly =
+    !admin && !editor && !user.roles.includes("viewer");
+  const [channels, guardrails, calendarImportCount, recentRequests] = await Promise.all([
+    portalOnly
+      ? Promise.resolve([])
+      : db.channel.findMany({
+          where: { active: true },
+          orderBy: { sortOrder: "asc" },
+          select: { key: true, name: true, color: true },
+        }),
+    portalOnly ? Promise.resolve([]) : getGuardrails(new Date()),
+    portalOnly
+      ? Promise.resolve(0)
+      : db.calendarImportCandidate.count({
+          where: { source: GOOGLE_ICAL_SOURCE, status: "pending" },
+        }),
+    db.request.findMany({
+      where: portalOnly
+        ? {
+            OR: [
+              { requesterId: user.id },
+              ...(user.email
+                ? [
+                    {
+                      requesterId: null,
+                      requesterEmail: user.email,
+                      pcoEventId: null,
+                      externalCalendarKey: null,
+                    },
+                  ]
+                : []),
+            ],
+          }
+        : undefined,
+      orderBy: [{ eventStart: "asc" }, { updatedAt: "desc" }],
+      take: 60,
+      select: { id: true, title: true, eventStart: true, status: true },
+    }),
+  ]);
   // Badge counts only ACTIONABLE heads-up items (capacity over-limits, mis-tier) —
   // informational "busy week" density signals don't drive the alert count.
   const guardrailCount = guardrails.filter((g) => g.severity !== "info").length;
 
-  const visible = (i: Item) => (!i.adminOnly || admin) && (!i.editorOnly || editor);
+  const visible = (i: Item) =>
+    (!portalOnly || i.portal === true) &&
+    (!i.adminOnly || admin) &&
+    (!i.editorOnly || editor);
   const visibleSections = SECTIONS.map((s) => ({
     heading: s.heading,
     items: s.items.filter(visible),
   })).filter((s) => s.items.length > 0);
+
+  const commandItems: CommandPaletteItem[] = [
+    ...visibleSections.flatMap((section) =>
+      section.items.map((item) => ({
+        href: item.href,
+        label: item.label,
+        detail: section.heading,
+        kind: "page" as const,
+        keywords: `${section.heading} ${item.label}`,
+      })),
+    ),
+    ...(!portalOnly
+      ? [
+          { href: "/outputs", label: "All channels", detail: "Channels", kind: "page" as const },
+          ...channels.map((channel) => ({
+            href: `/outputs/${channel.key}`,
+            label: channel.name,
+            detail: "Channel",
+            kind: "channel" as const,
+          })),
+        ]
+      : []),
+    ...recentRequests.map((request) => ({
+      href: portalOnly ? `/my-requests/${request.id}` : `/requests/${request.id}`,
+      label: request.title,
+      detail: `${request.eventStart.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} · ${request.status.replace(/_/g, " ")}`,
+      kind: "event" as const,
+      keywords: request.status,
+    })),
+  ].filter(
+    (item, index, items) => items.findIndex((candidate) => candidate.href === item.href) === index,
+  );
 
   const renderItem = (i: Item) => (
     <NavLink
@@ -125,6 +197,7 @@ export async function Nav() {
         editor={editor}
         guardrailCount={guardrailCount}
         calendarImportCount={calendarImportCount}
+        portalOnly={portalOnly}
       />
 
       {/* Desktop sidebar. grid-cols-1 (a minmax(0,1fr) column) clamps every row
@@ -137,6 +210,8 @@ export async function Nav() {
           </span>
           <span className="font-extrabold text-lg text-ink">Comms</span>
         </div>
+
+        <CommandPalette items={commandItems} />
 
         {/* "Do" is separated from "go": create actions live in a prominent button,
             not buried among the navigation links. */}
@@ -169,24 +244,34 @@ export async function Nav() {
         ))}
 
         {/* Channels: the live list of where things post (was "Outputs"). */}
-        <div className={sectionHeading}>Channels</div>
-        <NavLink
-          href="/outputs"
-          exact
-          className="nav-link shrink-0 rounded-2xl py-2 pl-4 pr-3 text-sm font-semibold text-muted"
-        >
-          All channels
-        </NavLink>
-        {channels.map((c) => (
-          <NavLink
-            key={c.key}
-            href={`/outputs/${c.key}`}
-            className="nav-link flex shrink-0 items-center gap-2.5 rounded-2xl py-2 pl-4 pr-3 text-sm text-ink/85"
-          >
-            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/70" style={{ background: c.color }} />
-            <span className="leading-tight">{c.name}</span>
-          </NavLink>
-        ))}
+        {!portalOnly && (
+          <>
+            <div className={sectionHeading}>Channels</div>
+            <NavLink
+              href="/outputs"
+              exact
+              className="nav-link shrink-0 rounded-2xl py-2 pl-4 pr-3 text-sm font-semibold text-muted"
+            >
+              All channels
+            </NavLink>
+            {channels.map((c) => (
+              <NavLink
+                key={c.key}
+                href={`/outputs/${c.key}`}
+                className="nav-link flex shrink-0 items-center gap-2.5 rounded-2xl py-2 pl-4 pr-3 text-sm text-ink/85"
+              >
+                <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full ring-2 ring-white/70" style={{ background: c.color }} />
+                <span className="leading-tight">{c.name}</span>
+              </NavLink>
+            ))}
+          </>
+        )}
+
+        <form action={logout} className="mt-3 border-t border-slate-100 pt-3">
+          <button className="nav-link flex w-full items-center gap-2 rounded-2xl px-4 py-2 text-left text-sm font-semibold text-muted">
+            <span>↪</span> Sign out
+          </button>
+        </form>
       </nav>
     </>
   );

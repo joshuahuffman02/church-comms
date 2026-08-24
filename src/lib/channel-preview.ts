@@ -1,6 +1,7 @@
 import { atMidnight, subDays, weekdaysBetween } from "@/lib/engine/dates";
 
 export interface PreviewInput {
+  key?: string;
   type: string;
   offset: number;
   lead: number;
@@ -16,8 +17,9 @@ export interface PreviewResult {
 /**
  * Resolve a channel's relative timing into real dates for one example event,
  * mirroring src/lib/engine/timeline.ts so the preview can't drift from the
- * real scheduler. windowed = first posting day in the window; dated_instance =
- * last posting day (and lockLeadDays overrides the production lead); one_shot =
+ * real scheduler. windowed = first posting day in the window; Announcement
+ * Video = first weekly appearance; other dated_instance channels = last
+ * posting day (and lockLeadDays overrides the production lead); one_shot =
  * straight offset from the event.
  */
 export function previewSchedule(input: PreviewInput, exampleEvent: Date): PreviewResult {
@@ -33,7 +35,11 @@ export function previewSchedule(input: PreviewInput, exampleEvent: Date): Previe
     goesOut = subDays(event, offset);
   } else if (input.type === "dated_instance") {
     const days = weekdaysBetween(subDays(event, offset), event, weekdays);
-    goesOut = days.length ? days[days.length - 1] : null;
+    goesOut = days.length
+      ? input.key === "announcement_video"
+        ? days[0]
+        : days[days.length - 1]
+      : null;
     effLead = input.lockLeadDays ?? lead;
   } else if (input.type === "single_weekday") {
     // The chosen weekday (default Friday) on/before the (event - offset) mark.

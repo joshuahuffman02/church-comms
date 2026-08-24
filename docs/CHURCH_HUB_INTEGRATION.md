@@ -1,0 +1,29 @@
+# Church Hub Integration
+
+Church Hub is a separate sibling project at `../Church Hub` relative to this repository.
+
+The canonical integration design is maintained in the Church Hub project:
+
+- [Architecture and integration plan](../../Church%20Hub/docs/ARCHITECTURE_AND_INTEGRATION.md)
+- [Separate-project decision](../../Church%20Hub/docs/decisions/0001-separate-project.md)
+
+## Boundary in this application
+
+Church Communications remains authoritative for:
+
+- Communication intake and requests
+- Triage, tiers, and approvals
+- Deliverables and production tasks
+- Channel schedules and placements
+- Proofs, assets, exports, and run sheets
+- Communications-specific Planning Center Calendar mirrors
+
+Church Hub will link to this work rather than reimplement it. Planned integration proceeds through:
+
+1. Reciprocal navigation using configured base URLs
+2. Planning Center user and organization identity in both products
+3. A signed handoff into `/submit`
+4. Safe links to `/requests/{id}` and `/my-requests/{id}`
+5. Narrow status summaries and signed webhooks after the basic journey is proven
+
+The applications must not share databases, session cookies, Planning Center tokens, or unrestricted internal APIs.

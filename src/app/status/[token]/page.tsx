@@ -47,21 +47,21 @@ function toneFor(status: string, name: string | null): Tone {
       return {
         heading: "We couldn't move this one forward",
         blurb: "The comms team wasn't able to take this request on.",
-        footer: "If you have questions, just reply to the confirmation email and the team will explain.",
+        footer: "Contact the communications team if you have questions about this decision.",
         ok: false,
       };
     case "cancelled":
       return {
         heading: "This request was cancelled",
         blurb: "It's no longer in the queue.",
-        footer: "If that's a surprise, reply to the confirmation email and we'll take a look.",
+        footer: "Contact the communications team if this was unexpected.",
         ok: false,
       };
     case "needs_info":
       return {
         heading: "We need a little more info",
         blurb: "The comms team has a question before they can move ahead.",
-        footer: "Keep an eye on your email — the team will reach out, or you can reply to your confirmation email.",
+        footer: "Please contact the communications team with the missing information.",
         ok: false,
       };
     case "published":
@@ -121,8 +121,8 @@ export default async function StatusPage({
 
       {isNew === "1" && (
         <div className="mb-4 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
-          Your request is in — we&apos;ve emailed you this tracking link.{" "}
-          <b>Bookmark this page</b> to check back anytime.
+          Your request is in. <b>Bookmark this page</b> to check back anytime;
+          email is not required for tracking.
         </div>
       )}
 

@@ -3,6 +3,11 @@ import Credentials from "next-auth/providers/credentials";
 import { db } from "./db";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
+import {
+  planningCenterProvider,
+  provisionPlanningCenterUser,
+} from "./pco-auth";
+import { parsePlanningCenterIdentity } from "./pco-auth-profile";
 import { parseRoles } from "./roles";
 
 // Module augmentation so `session.user.roles: string[]` and `session.user.id:
@@ -19,16 +24,9 @@ declare module "next-auth" {
       roles: string[];
     };
   }
-}
-
-/** Narrowing reads for the JWT's custom claims (token is Record<string, unknown>). */
-function tokenId(token: Record<string, unknown>): string {
-  return typeof token.id === "string" ? token.id : "";
-}
-function tokenRoles(token: Record<string, unknown>): string[] {
-  return Array.isArray(token.roles)
-    ? token.roles.filter((r): r is string => typeof r === "string")
-    : [];
+  interface User {
+    roles?: string[];
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -50,25 +48,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return { id: user.id, name: user.name, email: user.email, roles: parseRoles(user.roles) };
       },
     }),
+    ...(planningCenterProvider ? [planningCenterProvider] : []),
   ],
   callbacks: {
     ...authConfig.callbacks,
-    // At sign-in `user` is present (the authorize() return): copy id + roles
-    // onto the token. On later requests `user` is undefined and the token
-    // already carries them, so they persist.
-    jwt: async ({ token, user }) => {
-      if (user) {
-        const u = user as { id?: string; roles?: string[] };
-        if (u.id) token.id = u.id;
-        token.roles = Array.isArray(u.roles) ? u.roles : tokenRoles(token);
-      }
-      return token;
-    },
-    // Mirror id + roles from the token onto the session the app reads.
-    session: async ({ session, token }) => {
-      session.user.id = tokenId(token);
-      session.user.roles = tokenRoles(token);
-      return session;
+    signIn: async ({ user, account, profile }) => {
+      if (account?.provider !== "planning-center") return true;
+      const identity = parsePlanningCenterIdentity(profile);
+      if (!identity) return false;
+      const localUser = await provisionPlanningCenterUser(identity);
+      if (!localUser) return false;
+
+      // The OAuth profile id is PCO's `sub`; the rest of this app deliberately
+      // uses its own local SQLite id. Stamp the local identity before the JWT
+      // callback runs so request ownership is never keyed to an external id.
+      user.id = localUser.id;
+      user.name = localUser.name;
+      user.email = localUser.email;
+      user.roles = localUser.roles;
+      return true;
     },
   },
 });

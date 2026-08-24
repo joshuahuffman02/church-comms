@@ -7,8 +7,18 @@ import { useState } from "react";
  * sign-ups, so most requests see a shorter, calmer form. Field `name`s are
  * unchanged, so submitted data is identical to before.
  */
-export function RegistrationFields() {
-  const [needs, setNeeds] = useState(false);
+export function RegistrationFields({
+  defaultNeeds = false,
+  defaultUrl = "",
+  defaultCost = "",
+  defaultClosesAt = "",
+}: {
+  defaultNeeds?: boolean;
+  defaultUrl?: string;
+  defaultCost?: string;
+  defaultClosesAt?: string;
+} = {}) {
+  const [needs, setNeeds] = useState(defaultNeeds);
   return (
     <fieldset className="grid gap-3">
       <legend className="text-sm font-bold text-muted mb-1">Registration</legend>
@@ -30,6 +40,7 @@ export function RegistrationFields() {
               <input
                 name="registrationUrl"
                 type="url"
+                defaultValue={defaultUrl}
                 placeholder="https://church.org/vbs"
                 className="rounded-2xl border px-4 py-2"
               />
@@ -38,6 +49,7 @@ export function RegistrationFields() {
               <span className="text-sm text-muted">Cost</span>
               <input
                 name="cost"
+                defaultValue={defaultCost}
                 placeholder="Free / $10"
                 className="rounded-2xl border px-4 py-2"
               />
@@ -45,7 +57,12 @@ export function RegistrationFields() {
           </div>
           <label className="grid gap-1">
             <span className="text-sm text-muted">Registration closes</span>
-            <input name="registrationClosesAt" type="date" className="rounded-2xl border px-4 py-2" />
+            <input
+              name="registrationClosesAt"
+              type="date"
+              defaultValue={defaultClosesAt}
+              className="rounded-2xl border px-4 py-2"
+            />
           </label>
         </div>
       )}

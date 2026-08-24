@@ -5,6 +5,7 @@ node_modules/
 
 # Next.js
 .next/
+.next-dev/
 out/
 build/
 dist/
@@ -56,3 +57,14 @@ coverage/
 tmp/
 
 /src/generated/prisma
+
+# local agent/working artifacts
+.codex-audit-*/
+.codex-design-qa-*/
+.claude/
+output/
+backups/
+tmp/
+design-qa.md
+practice-sync.db
+dev.db

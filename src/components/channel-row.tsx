@@ -10,6 +10,7 @@ import { tierLabel } from "@/lib/labels";
 
 export interface ChannelView {
   id: string;
+  key: string;
   name: string;
   type: string;
   color: string;
@@ -112,7 +113,7 @@ export function ChannelRow({
 
   const event = parseDateInput(exampleEventKey) ?? atMidnight(new Date());
   const preview = previewSchedule(
-    { type, offset: num(offset), lead: num(lead), lockLeadDays: lockLead.trim() === "" ? null : num(lockLead), weekdays },
+    { key: channel.key, type, offset: num(offset), lead: num(lead), lockLeadDays: lockLead.trim() === "" ? null : num(lockLead), weekdays },
     event,
   );
   const gDays = daysBefore(event, preview.goesOut);
@@ -120,8 +121,9 @@ export function ChannelRow({
 
   const toggleIn = (arr: number[], v: number) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
+  const weeklyAnnouncementVideo = channel.key === "announcement_video" && type === "dated_instance";
   const summary = preview.goesOut
-    ? `goes out ${gDays} days before · artwork due ${aDays} days before`
+    ? `${weeklyAnnouncementVideo ? "eligible weekly from" : "goes out"} ${gDays} days before · artwork due ${aDays} days before`
     : "no posting day in the window — check the weekdays";
 
   const offsetLabel =
@@ -235,7 +237,9 @@ export function ChannelRow({
                 ? <>{exampleEventLabel
                       ? <>For your next event, <b>{exampleEventLabel}</b> on <b>{fmt(event)}</b> — </>
                       : <>For an example event on <b>{fmt(event)}</b> — </>}
-                    artwork due <b>{fmt(preview.assetDue)}</b>, goes out <b>{fmt(preview.goesOut)}</b>.</>
+                    artwork due <b>{fmt(preview.assetDue)}</b>, {weeklyAnnouncementVideo
+                      ? <>first eligible <b>{fmt(preview.goesOut)}</b>, then eligible weekly through the event.</>
+                      : <>goes out <b>{fmt(preview.goesOut)}</b>.</>}</>
                 : <>No posting day falls inside the promotion window — adjust the weekdays or “start promoting”.</>}
               {preview.goesOut && (
                 <div className="relative mt-3 h-2">

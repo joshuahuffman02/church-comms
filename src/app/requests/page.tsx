@@ -6,6 +6,10 @@ import { atMidnight } from "@/lib/engine/dates";
 import { isEditor } from "@/lib/roles";
 import { RequestsTable, type RequestFilters, type RequestRow } from "@/components/requests-table";
 import { UnlinkedPcoBanner } from "@/components/unlinked-pco-banner";
+import {
+  describeRequestProvenance,
+  requestAttentionLabel,
+} from "@/lib/provenance";
 
 // The unlinked-PCO banner does live PCO network I/O, so render per request.
 export const dynamic = "force-dynamic";
@@ -49,10 +53,13 @@ export default async function RequestsIndex({
       location: true,
       pcoEventId: true,
       externalCalendarKey: true,
+      requesterName: true,
+      requesterEmail: true,
       noPromo: true,
       needsRegistration: true,
       seriesId: true,
       owner: { select: { name: true } },
+      requester: { select: { name: true } },
       ministries: {
         orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         select: { name: true, color: true },
@@ -73,6 +80,7 @@ export default async function RequestsIndex({
   });
 
   const rows: RequestRow[] = requests.map((r) => {
+    const provenance = describeRequestProvenance(r);
     const unfinished = r.deliverables.filter((d) => d.status !== "skipped" && d.status !== "published");
     const nextDue = unfinished
       .map((d) => d.productionDueAt)
@@ -101,8 +109,10 @@ export default async function RequestsIndex({
       location: r.location,
       noPromo: r.noPromo,
       needsRegistration: r.needsRegistration,
-      ownerName: r.owner?.name ?? null,
-      source: r.externalCalendarKey !== null ? "calendar" : r.pcoEventId !== null ? "pco" : "local",
+      ownerName: provenance.ownerLabel,
+      requesterLabel: provenance.requesterLabel,
+      source: provenance.source,
+      whyLabel: requestAttentionLabel(r.status),
       seriesId: r.seriesId,
     };
   });

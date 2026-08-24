@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Undo2, X } from "lucide-react";
 import { setDeliverableStatus } from "@/actions/request-status";
 import { DELIVERABLE_STATUSES, DELIVERABLE_STATUS_HELP, DELIVERABLE_STATUS_META } from "@/lib/status";
 import { useSaveFlash, SavedTick } from "@/components/save-flash";
@@ -31,6 +31,8 @@ export function DeliverableStatusButton({
   const [skipReason, setSkipReason] = useState("");
   const [pending, start] = useTransition();
   const cancelSkipRef = useRef<HTMLButtonElement>(null);
+  const undoTimerRef = useRef<number | null>(null);
+  const [lastChange, setLastChange] = useState<{ from: string; to: string } | null>(null);
   const { flash, ping } = useSaveFlash();
   const meta = DELIVERABLE_STATUS_META[optimisticStatus] ?? { label: optimisticStatus, color: "#94a3b8" };
   const fullWorkLabel = eventTitle ? `${workLabel} for ${eventTitle}` : workLabel;
@@ -39,7 +41,15 @@ export function DeliverableStatusButton({
     if (confirmSkip) cancelSkipRef.current?.focus();
   }, [confirmSkip]);
 
-  function saveStatus(nextStatus: string, reason?: string) {
+  useEffect(
+    () => () => {
+      if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
+    },
+    [],
+  );
+
+  function saveStatus(nextStatus: string, reason?: string, recordUndo = true) {
+    const previousStatus = optimisticStatus;
     setError(null);
     start(async () => {
       setOptimisticStatus(nextStatus);
@@ -50,6 +60,11 @@ export function DeliverableStatusButton({
           await setDeliverableStatus(id, nextStatus, nextStatus === "skipped" ? reason : undefined);
         }
         ping();
+        if (recordUndo && previousStatus !== nextStatus) {
+          setLastChange({ from: previousStatus, to: nextStatus });
+          if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
+          undoTimerRef.current = window.setTimeout(() => setLastChange(null), 7000);
+        }
       } catch {
         setError("Not saved");
       }
@@ -103,6 +118,24 @@ export function DeliverableStatusButton({
         </button>
       )}
       <SavedTick show={flash} />
+      {lastChange && !pending && (
+        <span role="status" className="inline-flex min-h-9 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-800">
+          {DELIVERABLE_STATUS_META[lastChange.to]?.label ?? lastChange.to}
+          <button
+            type="button"
+            onClick={() => {
+              const previous = lastChange.from;
+              setLastChange(null);
+              if (undoTimerRef.current !== null) window.clearTimeout(undoTimerRef.current);
+              saveStatus(previous, undefined, false);
+            }}
+            className="inline-flex min-h-7 items-center gap-1 rounded-full px-2 text-emerald-900 underline hover:bg-emerald-100"
+          >
+            <Undo2 className="h-3 w-3" aria-hidden />
+            Undo
+          </button>
+        </span>
+      )}
       {error && <span role="alert" className="text-[10px] font-bold text-red-700">{error}</span>}
       {confirmSkip && typeof document !== "undefined" && createPortal(
         <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/35 p-4" role="presentation">

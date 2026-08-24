@@ -260,7 +260,7 @@ export function schedulePresetDeliverables(placements: ScheduledChannelPlacement
 
   const out: ComputedDeliverable[] = [];
   for (const group of byChannel.values()) {
-    if (group.channel.type === "windowed") {
+    if (group.channel.type === "windowed" || group.channel.key === "announcement_video") {
       out.push(fixedDeliverable(group.channel, group.touches));
       continue;
     }

@@ -13,6 +13,15 @@ Noncommercial License 1.0.0. You may not sell this product, offer it as a paid
 hosted service, or otherwise use it for commercial purposes without separate
 written permission from the maintainer.
 
+## Related Project
+
+[Church Hub](../Church%20Hub/README.md) is planned as a separate staff operating
+system for goals, ministry work, communication, formation, and support. Church
+Comms remains the specialized system for communication requests and production.
+The products will connect through Planning Center identity, stable links, signed
+handoffs, and narrow status synchronization rather than a shared database. See
+[the integration boundary](docs/CHURCH_HUB_INTEGRATION.md).
+
 ## What It Does
 
 - Public request intake and requester status pages.

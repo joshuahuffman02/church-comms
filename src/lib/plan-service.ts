@@ -29,6 +29,10 @@ type ScheduleLockPlanInput = {
   channel: ChannelConfig;
 };
 
+function isRecurringDatedChannel(channel: ChannelConfig): boolean {
+  return channel.type === "dated_instance" && channel.key === "announcement_video";
+}
+
 function channelConfigFromRow(c: ChannelConfigRow): ChannelConfig {
   return {
     key: c.key,
@@ -126,6 +130,23 @@ function lockedWindowedDeliverable(
   };
 }
 
+function lockedRecurringDatedDeliverable(
+  ev: EventInput,
+  ch: ChannelConfig,
+  locks: ScheduleLockPlanInput[],
+): ComputedDeliverable {
+  const touches = sortTouches(locks.map((lock) => lockedTouch(ev, lock.scheduledAt)));
+  const firstTouch = touches[0];
+  return {
+    channelKey: ch.key,
+    instanceDate: firstTouch.scheduledAt,
+    productionDueAt: subDays(firstTouch.scheduledAt, lockedLeadDays(ch)),
+    phase: firstTouch.purposeLabel,
+    status: "to_design",
+    touches,
+  };
+}
+
 function mergeWindowedLocks(
   ev: EventInput,
   d: ComputedDeliverable,
@@ -157,12 +178,42 @@ function mergeWindowedLocks(
   };
 }
 
+function mergeRecurringDatedLocks(
+  ev: EventInput,
+  d: ComputedDeliverable,
+  locks: ScheduleLockPlanInput[],
+): ComputedDeliverable {
+  const touchByDay = new Map(d.touches.map((touch) => [atMidnight(touch.scheduledAt).getTime(), touch]));
+  for (const lock of locks) {
+    const touch = lockedTouch(ev, lock.scheduledAt);
+    touchByDay.set(touch.scheduledAt.getTime(), touch);
+  }
+
+  const touches = sortTouches([...touchByDay.values()]);
+  const firstTouch = touches[0];
+  const firstLockDue = subDays(
+    atMidnight(locks[0].scheduledAt),
+    lockedLeadDays(locks[0].channel),
+  );
+
+  return {
+    ...d,
+    instanceDate: firstTouch?.scheduledAt ?? d.instanceDate,
+    productionDueAt: minDate(d.productionDueAt, firstLockDue),
+    phase: firstTouch?.purposeLabel ?? d.phase,
+    status: "to_design",
+    skippedReason: undefined,
+    touches,
+  };
+}
+
 /**
  * Reapply staff locks to a freshly computed plan.
  *
- * Single-placement channels (one_shot, single_weekday, dated_instance) are
- * replaced by one locked deliverable per locked date. Windowed channels keep
- * their generated window and get the locked dates inserted into it.
+ * Single-placement channels (one_shot, single_weekday, ordinary dated_instance)
+ * are replaced by one locked deliverable per locked date. Windowed channels
+ * and the recurring Announcement Video keep their generated placements and get
+ * locked dates inserted into them.
  */
 export function applyScheduleLocksToPlan(
   ev: EventInput,
@@ -183,7 +234,7 @@ export function applyScheduleLocksToPlan(
   }
 
   const out: ComputedDeliverable[] = [];
-  const handledWindowed = new Set<string>();
+  const handledMultiTouch = new Set<string>();
 
   for (const d of plan) {
     const channelLocks = locksByChannel.get(d.channelKey);
@@ -195,16 +246,25 @@ export function applyScheduleLocksToPlan(
     const channel = channelLocks[0].channel;
     if (channel.type === "windowed") {
       out.push(mergeWindowedLocks(ev, d, channelLocks));
-      handledWindowed.add(channel.key);
+      handledMultiTouch.add(channel.key);
+    } else if (isRecurringDatedChannel(channel)) {
+      out.push(mergeRecurringDatedLocks(ev, d, channelLocks));
+      handledMultiTouch.add(channel.key);
     }
-    // Non-windowed locked channels intentionally replace the generated date.
+    // Other non-windowed locked channels intentionally replace the generated date.
   }
 
   for (const channelLocks of locksByChannel.values()) {
     const channel = channelLocks[0].channel;
     if (channel.type === "windowed") {
-      if (!handledWindowed.has(channel.key)) {
+      if (!handledMultiTouch.has(channel.key)) {
         out.push(lockedWindowedDeliverable(ev, channel, channelLocks));
+      }
+      continue;
+    }
+    if (isRecurringDatedChannel(channel)) {
+      if (!handledMultiTouch.has(channel.key)) {
+        out.push(lockedRecurringDatedDeliverable(ev, channel, channelLocks));
       }
       continue;
     }

@@ -36,7 +36,7 @@ function toView(c: ChannelRecord): ChannelView {
     ? (c.tierEligibility as unknown[]).filter((n): n is number => n === 1 || n === 2 || n === 3)
     : [1, 2, 3];
   return {
-    id: c.id, name: c.name, type: c.type, color: c.color, active: c.active,
+    id: c.id, key: c.key, name: c.name, type: c.type, color: c.color, active: c.active,
     offset: c.defaultPublishOffsetDays, lead: c.productionLeadDays, lockLeadDays: c.lockLeadDays,
     weekdays, capacity: c.capacity, frequencyCap: c.frequencyCap, tiers, notes: c.productionNotes ?? "",
   };

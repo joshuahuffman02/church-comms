@@ -195,10 +195,9 @@ async function upsertPcoEvent(
       pcoOwnerName: extras.ownerName,
       pcoOwnerEmail: extras.ownerEmail,
       pcoRoomStatus: extras.roomStatus,
-      // Prefill the requester contact from the PCO owner so a freshly imported
-      // event isn't anonymous — triage can still override it.
-      requesterName: extras.ownerName,
-      requesterEmail: extras.ownerEmail,
+      // PCO's event owner is source context, not proof that the person submitted
+      // a communications request. Keep that contact only in pcoOwnerName/email
+      // above so imports never appear in somebody's My Requests history.
       whoIsItFor: "whole_church",
       // Tag-driven classification (CREATE only): the matched ministries, the
       // suggested tier as both an advisory hint AND the working `tier` (so the

@@ -11,6 +11,13 @@ model User {
   name          String
   email         String         @unique
   password      String?
+  // Planning Center OpenID Connect identity. These are populated just in time
+  // on the person's first sign-in; staff never need a pre-created app account
+  // or a local password. `sub` is globally stable for the PCO user, while the
+  // organization id prevents an account from another church being admitted.
+  pcoUserId          String?    @unique
+  pcoOrganizationId  String?
+  lastLoginAt        DateTime?
   roles         Json // string[]: ["admin","triager","designer","publisher","approver","requester"]
   active        Boolean        @default(true)
   createdAt     DateTime       @default(now())
@@ -21,6 +28,8 @@ model User {
   approvalRules ApprovalRule[]
   approvals     Approval[]
   activityLogs  ActivityLog[]
+
+  @@index([pcoOrganizationId])
 }
 
 /// Durable, staff-visible history for trust-critical changes. Records who did
@@ -190,6 +199,9 @@ model Request {
   nextStepText         String?
   nextStepUrl          String?
   successMetric        String?
+  // Requester-facing notes are deliberately separate from `notes`, which may
+  // contain internal production context that must never leak into My Requests.
+  requesterNotes       String?
   notes                String?
   sensitiveFlag        Boolean          @default(false)
   status               String           @default("submitted")
@@ -208,6 +220,7 @@ model Request {
 
   @@index([seriesId])
   @@index([schedulePreset])
+  @@index([requesterId, eventStart])
 }
 
 /// An ignored occurrence from a local/external iCal import preview. This is the

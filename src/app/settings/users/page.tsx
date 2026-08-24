@@ -18,12 +18,14 @@ const ASSIGNABLE_ROLES: { value: string; label: string; hint: string }[] = [
   { value: "admin", label: "Admin", hint: "Full access: users, settings, deletes" },
   { value: "editor", label: "Editor", hint: "Everyday comms work" },
   { value: "viewer", label: "Viewer", hint: "Read-only" },
+  { value: "requester", label: "Requester", hint: "Only their own requests and submissions" },
 ];
 
 const ROLE_CHIP: Record<string, string> = {
   admin: "bg-violet-100 text-violet-700",
   editor: "bg-sky-100 text-sky-700",
   viewer: "bg-slate-100 text-slate-600",
+  requester: "bg-emerald-100 text-emerald-700",
 };
 
 function RoleChip({ role }: { role: string }) {
@@ -65,9 +67,9 @@ export default async function Users() {
       <SettingsNav />
       <h1 className="text-2xl font-extrabold mb-1">Team &amp; access 👥</h1>
       <p className="text-muted mb-5 leading-relaxed">
-        Add staff, set what they can do, and turn access off when someone leaves
-        — no server access required. A user with no password set can&apos;t log
-        in until you give them one.
+        Planning Center staff appear automatically after their first sign-in.
+        Set what people can do or turn access off when someone leaves. Local
+        passwords remain available for communications administrators.
       </p>
 
       {/* ---- Existing users -------------------------------------------------- */}
@@ -77,6 +79,7 @@ export default async function Users() {
           const deactivate = deactivateUser.bind(null, u.id);
           const reactivate = reactivateUser.bind(null, u.id);
           const noPassword = !u.password;
+          const usesPlanningCenter = !!u.pcoUserId;
           return (
             <div key={u.id} className="card-float p-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -88,7 +91,12 @@ export default async function Users() {
                         deactivated
                       </span>
                     )}
-                    {u.active && noPassword && (
+                    {u.active && usesPlanningCenter && (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">
+                        Planning Center
+                      </span>
+                    )}
+                    {u.active && noPassword && !usesPlanningCenter && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
                         no password
                       </span>
@@ -130,20 +138,23 @@ export default async function Users() {
                 </button>
               </form>
 
-              {/* Reset password */}
-              <form action={setUserPassword.bind(null, u.id)} className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold uppercase text-muted">Password</span>
-                <input
-                  name="password"
-                  type="password"
-                  required
-                  placeholder={noPassword ? "Set initial password" : "New password"}
-                  className="rounded-full border px-3 py-1 text-sm w-56"
-                />
-                <button className="rounded-full border px-4 py-1 text-xs font-semibold text-muted hover:bg-sky-bg transition">
-                  {noPassword ? "Set password" : "Reset password"}
-                </button>
-              </form>
+              {/* PCO requesters do not need a local password. Admin/editor
+                  accounts can still keep one as the local fallback. */}
+              {(!usesPlanningCenter || roles.some((role) => ["admin", "editor"].includes(role))) && (
+                <form action={setUserPassword.bind(null, u.id)} className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold uppercase text-muted">Password</span>
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    placeholder={noPassword ? "Set optional local password" : "New password"}
+                    className="rounded-full border px-3 py-1 text-sm w-56"
+                  />
+                  <button className="rounded-full border px-4 py-1 text-xs font-semibold text-muted hover:bg-sky-bg transition">
+                    {noPassword ? "Set password" : "Reset password"}
+                  </button>
+                </form>
+              )}
             </div>
           );
         })}

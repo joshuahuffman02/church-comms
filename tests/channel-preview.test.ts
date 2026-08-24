@@ -18,9 +18,22 @@ describe("previewSchedule", () => {
   });
 
   it("dated_instance uses the LAST posting day and prefers lockLeadDays", () => {
-    const r = previewSchedule({ type: "dated_instance", offset: 21, lead: 7, lockLeadDays: 14, weekdays: [0] }, event);
+    const r = previewSchedule({ key: "stage", type: "dated_instance", offset: 21, lead: 7, lockLeadDays: 14, weekdays: [0] }, event);
     expect(ymd(r.goesOut)).toBe("2026-7-26");
     expect(ymd(r.assetDue)).toBe("2026-7-12");
+  });
+
+  it("announcement video previews the first weekly appearance", () => {
+    const r = previewSchedule({
+      key: "announcement_video",
+      type: "dated_instance",
+      offset: 21,
+      lead: 7,
+      lockLeadDays: 7,
+      weekdays: [0],
+    }, event);
+    expect(ymd(r.goesOut)).toBe("2026-7-5");
+    expect(ymd(r.assetDue)).toBe("2026-6-28");
   });
 
   it("dated_instance falls back to lead when no lockLeadDays", () => {

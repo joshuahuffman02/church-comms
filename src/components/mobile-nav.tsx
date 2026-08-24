@@ -2,6 +2,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { logout } from "@/actions/auth";
+import { Search } from "lucide-react";
 
 export type MobileNavItem = { href: string; label: string; icon: string; badge?: "guardrails" | "calendar" };
 export type MobileNavSection = { heading: string; items: MobileNavItem[] };
@@ -17,12 +19,14 @@ export function MobileNav({
   editor,
   guardrailCount,
   calendarImportCount,
+  portalOnly,
 }: {
   sections: MobileNavSection[];
   channels: { key: string; name: string; color: string }[];
   editor: boolean;
   guardrailCount: number;
   calendarImportCount: number;
+  portalOnly: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
@@ -37,7 +41,7 @@ export function MobileNav({
   return (
     <div className="no-print lg:hidden">
       <div className="card-float sticky top-2 z-30 m-3 flex items-center gap-2 p-2">
-        <Link href="/this-week" onClick={close} className="flex items-center gap-2 px-2 py-1">
+        <Link href="/" onClick={close} className="flex items-center gap-2 px-2 py-1">
           <span className="grid h-8 w-8 place-items-center rounded-2xl bg-gradient-to-br from-sky-200 to-violet-200 text-base shadow-sm">
             ☁️
           </span>
@@ -53,6 +57,14 @@ export function MobileNav({
               ＋ New
             </Link>
           )}
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("comms:open-search"))}
+            aria-label="Find a page or event"
+            className="grid h-11 w-11 place-items-center rounded-2xl text-ink hover:bg-sky-bg"
+          >
+            <Search className="h-5 w-5" aria-hidden />
+          </button>
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
@@ -126,27 +138,29 @@ export function MobileNav({
               </div>
             ))}
 
-            <div className="mt-3">
-              <div className="px-2 pb-1 text-[11px] font-extrabold uppercase text-muted">Channels</div>
-              <Link
-                href="/outputs"
-                onClick={close}
-                className="flex min-h-11 items-center rounded-2xl px-3 py-2.5 text-sm font-semibold text-muted hover:bg-sky-bg"
-              >
-                All channels
-              </Link>
-              {channels.map((c) => (
+            {!portalOnly && (
+              <div className="mt-3">
+                <div className="px-2 pb-1 text-[11px] font-extrabold uppercase text-muted">Channels</div>
                 <Link
-                  key={c.key}
-                  href={`/outputs/${c.key}`}
+                  href="/outputs"
                   onClick={close}
-                  className="flex min-h-11 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm text-ink/85 hover:bg-sky-bg"
+                  className="flex min-h-11 items-center rounded-2xl px-3 py-2.5 text-sm font-semibold text-muted hover:bg-sky-bg"
                 >
-                  <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />
-                  {c.name}
+                  All channels
                 </Link>
-              ))}
-            </div>
+                {channels.map((c) => (
+                  <Link
+                    key={c.key}
+                    href={`/outputs/${c.key}`}
+                    onClick={close}
+                    className="flex min-h-11 items-center gap-2.5 rounded-2xl px-3 py-2.5 text-sm text-ink/85 hover:bg-sky-bg"
+                  >
+                    <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c.color }} />
+                    {c.name}
+                  </Link>
+                ))}
+              </div>
+            )}
 
             {editor && (
               <Link
@@ -157,6 +171,11 @@ export function MobileNav({
                 <span>⚡</span> Quick post
               </Link>
             )}
+            <form action={logout} className="mt-3 border-t border-slate-100 pt-3">
+              <button className="flex min-h-11 w-full items-center gap-2 rounded-2xl px-3 py-2.5 font-semibold text-muted hover:bg-sky-bg">
+                <span>↪</span> Sign out
+              </button>
+            </form>
           </div>
         </div>
       )}

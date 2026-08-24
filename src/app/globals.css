@@ -47,6 +47,11 @@ body {
   position: relative;
 }
 
+::selection {
+  background: rgba(167, 139, 250, 0.28);
+  color: var(--color-ink);
+}
+
 /* Drifting cloud blobs — purely decorative, behind all content. */
 body::before,
 body::after {
@@ -131,6 +136,18 @@ input:hover,
 select:hover,
 textarea:hover {
   border-color: rgba(129, 140, 248, 0.45);
+}
+input[aria-invalid="true"],
+select[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: rgba(225, 29, 72, 0.7);
+  background: rgba(255, 241, 242, 0.88);
+}
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
 }
 
 /* Visible, soft-but-clear focus ring for ALL interactive elements

@@ -1,147 +1,148 @@
-import { submitIntake } from "@/actions/intake";
-import { RegistrationFields } from "@/components/registration-fields";
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { getSessionUser } from "@/lib/authz";
+import { isEditor } from "@/lib/roles";
+import {
+  GuidedIntakeForm,
+  type RecentRequestTemplate,
+} from "@/components/guided-intake-form";
+import type { IntakePreviewChannel } from "@/lib/smart-workflow";
+
+const dateInputValue = (date: Date | null): string => {
+  if (!date) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+function tierEligibility(value: unknown): number[] {
+  if (!Array.isArray(value)) return [1, 2, 3];
+  return value.filter(
+    (tier): tier is number =>
+      typeof tier === "number" && Number.isInteger(tier) && tier >= 1 && tier <= 3,
+  );
+}
 
 export default async function SubmitPage({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const { error } = await searchParams;
+  const [{ error }, user, channelRows] = await Promise.all([
+    searchParams,
+    getSessionUser(),
+    db.channel.findMany({
+      where: { active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        key: true,
+        name: true,
+        tierEligibility: true,
+        defaultPublishOffsetDays: true,
+        productionLeadDays: true,
+      },
+    }),
+  ]);
+
+  const recentRows = user
+    ? await db.request.findMany({
+        where: {
+          OR: [
+            { requesterId: user.id },
+            ...(user.email
+              ? [
+                  {
+                    requesterId: null,
+                    requesterEmail: user.email,
+                    pcoEventId: null,
+                    externalCalendarKey: null,
+                  },
+                ]
+              : []),
+          ],
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 8,
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          whoIsItFor: true,
+          eventStart: true,
+          location: true,
+          needsRegistration: true,
+          registrationUrl: true,
+          cost: true,
+          registrationClosesAt: true,
+          nextStepText: true,
+          ministries: {
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+            take: 1,
+            select: { name: true },
+          },
+        },
+      })
+    : [];
+
+  const channels: IntakePreviewChannel[] = channelRows.map((channel) => ({
+    key: channel.key,
+    name: channel.name,
+    tierEligibility: tierEligibility(channel.tierEligibility),
+    defaultPublishOffsetDays: channel.defaultPublishOffsetDays,
+    productionLeadDays: channel.productionLeadDays,
+  }));
+
+  const recentRequests: RecentRequestTemplate[] = recentRows.map((request) => ({
+    id: request.id,
+    title: request.title,
+    description: request.description ?? "",
+    ministry: request.ministries[0]?.name ?? "",
+    whoIsItFor: request.whoIsItFor,
+    eventStart: dateInputValue(request.eventStart),
+    location: request.location ?? "",
+    needsRegistration: request.needsRegistration,
+    registrationUrl: request.registrationUrl ?? "",
+    cost: request.cost ?? "",
+    registrationClosesAt: dateInputValue(request.registrationClosesAt),
+    nextStep: request.nextStepText ?? "",
+  }));
 
   return (
-    <div className="mx-auto max-w-2xl py-6">
-      <div className="mb-5 text-center">
-        <h1 className="text-3xl font-extrabold">Request church communications ✨</h1>
-        <p className="text-muted mt-1">
-          Tell us about your event and we&apos;ll help get the word out. The comms team
-          reviews new requests Mon &amp; Thu.
+    <div className="mx-auto max-w-4xl py-3 sm:py-6">
+      <header className="mb-6 text-center">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-sky-700">Communication request</p>
+        <h1 className="mt-2 text-3xl font-extrabold text-ink sm:text-4xl">
+          Tell us once. We’ll shape the plan. ✨
+        </h1>
+        <p className="mx-auto mt-2 max-w-2xl text-muted">
+          About three minutes. Your answers create an explainable starting plan, and the
+          comms team reviews new requests Mon &amp; Thu.
         </p>
-      </div>
+        {user && (
+          <Link
+            href="/my-requests"
+            className="mt-3 inline-flex text-sm font-bold text-sky-700 hover:underline"
+          >
+            ← Back to My Requests
+          </Link>
+        )}
+      </header>
 
       {error && (
-        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
-          Please add a title, a valid email, and an event date, then try again.
+        <div role="alert" className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+          A few required details were missing. Your on-device draft may still be available below.
         </div>
       )}
 
-      <form action={submitIntake} className="card-float p-6 grid gap-5">
-        {/* The basics */}
-        <fieldset className="grid gap-3">
-          <legend className="text-sm font-bold text-muted mb-1">About you</legend>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Your name</span>
-              <input
-                name="requesterName"
-                placeholder="Jane Doe"
-                className="rounded-2xl border px-4 py-2"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Email *</span>
-              <input
-                name="requesterEmail"
-                type="email"
-                required
-                placeholder="you@example.com"
-                className="rounded-2xl border px-4 py-2"
-              />
-            </label>
-          </div>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">Ministry / team</span>
-            <input
-              name="ministry"
-              placeholder="e.g. Youth, Worship, Missions"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-        </fieldset>
+      <GuidedIntakeForm
+        user={user?.email ? { name: user.name ?? null, email: user.email } : null}
+        canImport={Boolean(user && isEditor(user.roles))}
+        channels={channels}
+        recentRequests={recentRequests}
+      />
 
-        {/* Event details */}
-        <fieldset className="grid gap-3">
-          <legend className="text-sm font-bold text-muted mb-1">The event</legend>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">Event title *</span>
-            <input
-              name="title"
-              required
-              maxLength={200}
-              placeholder="Summer VBS Kickoff"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">What&apos;s happening?</span>
-            <textarea
-              name="description"
-              maxLength={5000}
-              rows={3}
-              placeholder="A short description of the event"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Who is it for?</span>
-              <select name="whoIsItFor" className="rounded-2xl border px-4 py-2">
-                <option value="whole_church">Whole church</option>
-                <option value="ministry">A specific ministry</option>
-                <option value="small_group">A small group / team</option>
-                <option value="leadership">Leadership</option>
-              </select>
-            </label>
-            <label className="grid gap-1">
-              <span className="text-sm text-muted">Event date *</span>
-              <input
-                name="eventStart"
-                type="date"
-                required
-                className="rounded-2xl border px-4 py-2"
-              />
-            </label>
-          </div>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">Location</span>
-            <input
-              name="location"
-              placeholder="Fellowship Hall"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-        </fieldset>
-
-        {/* Registration (fields reveal only when sign-ups are needed) */}
-        <RegistrationFields />
-
-        {/* The message */}
-        <fieldset className="grid gap-3">
-          <legend className="text-sm font-bold text-muted mb-1">The message</legend>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">One next step</span>
-            <input
-              name="nextStep"
-              maxLength={500}
-              placeholder="Register at church.org/vbs"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-          <label className="grid gap-1">
-            <span className="text-sm text-muted">Anything else?</span>
-            <textarea
-              name="notes"
-              maxLength={5000}
-              rows={3}
-              placeholder="Notes for the comms team"
-              className="rounded-2xl border px-4 py-2"
-            />
-          </label>
-        </fieldset>
-
-        <button className="rounded-full bg-ink text-white py-2.5 font-semibold">
-          Send it to the comms team →
-        </button>
-      </form>
+      <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+        Nothing is published automatically. The communication team reviews and can adjust every suggested channel and date.
+      </p>
     </div>
   );
 }

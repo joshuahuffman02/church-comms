@@ -25,17 +25,34 @@ describe("applyScheduleLocksToPlan", () => {
     tierEligibility: [1],
   };
 
-  it("replaces a dated-instance auto placement with the locked date", () => {
+  it("keeps weekly video eligibility when one of its dates is locked", () => {
     const input = { eventStart, tier: 1 };
     const plan = planEvent(input, [announcementVideo], today);
     const locked = applyScheduleLocksToPlan(input, plan, [
-      { channel: announcementVideo, scheduledAt: atMidnight(new Date("2026-07-05")) },
+      { channel: announcementVideo, scheduledAt: atMidnight(new Date("2026-06-21")) },
     ]);
 
     expect(locked).toHaveLength(1);
-    expect(ymd(locked[0].instanceDate)).toBe("2026-07-05");
-    expect(locked[0].touches.map((touch) => ymd(touch.scheduledAt))).toEqual(["2026-07-05"]);
+    expect(ymd(locked[0].instanceDate)).toBe("2026-06-21");
+    expect(locked[0].touches.map((touch) => ymd(touch.scheduledAt))).toEqual([
+      "2026-06-21",
+      "2026-06-28",
+      "2026-07-05",
+      "2026-07-12",
+    ]);
     expect(locked[0].status).toBe("to_design");
+  });
+
+  it("still replaces an ordinary dated-instance placement with the locked date", () => {
+    const stage: ChannelConfig = { ...announcementVideo, key: "stage", name: "Stage" };
+    const input = { eventStart, tier: 1 };
+    const plan = planEvent(input, [stage], today);
+    const locked = applyScheduleLocksToPlan(input, plan, [
+      { channel: stage, scheduledAt: atMidnight(new Date("2026-07-05")) },
+    ]);
+
+    expect(locked).toHaveLength(1);
+    expect(locked[0].touches.map((touch) => ymd(touch.scheduledAt))).toEqual(["2026-07-05"]);
   });
 
   it("adds a locked channel even when normal tier eligibility would exclude it", () => {

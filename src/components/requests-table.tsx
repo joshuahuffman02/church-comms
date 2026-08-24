@@ -15,7 +15,7 @@ import {
   type EventRepeatGroup,
 } from "@/lib/events-overview";
 
-export type EventSource = "pco" | "calendar" | "local";
+export type EventSource = "pco" | "calendar" | "request" | "local";
 export type EventView = "focus" | "upcoming" | "repeating" | "archive";
 
 export type RequestRow = {
@@ -32,6 +32,8 @@ export type RequestRow = {
   noPromo: boolean;
   needsRegistration: boolean;
   ownerName: string | null;
+  requesterLabel: string;
+  whyLabel: string;
   source: EventSource;
   seriesId: string | null;
 };
@@ -83,6 +85,7 @@ const STATUS_CLASSES: Record<string, string> = {
 const SOURCE_META: Record<EventSource, { label: string; className: string }> = {
   pco: { label: "Planning Center", className: "bg-indigo-50 text-indigo-800" },
   calendar: { label: "Calendar import", className: "bg-cyan-50 text-cyan-800" },
+  request: { label: "Request form", className: "bg-emerald-50 text-emerald-800" },
   local: { label: "Added here", className: "bg-slate-100 text-slate-700" },
 };
 
@@ -160,6 +163,9 @@ function EventRow({ row, todayMs, duplicate = false }: { row: RequestRow; todayM
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
             <TierBadge tier={row.tier} />
             <SourceBadge source={row.source} />
+            <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-900">
+              Why: {row.whyLabel}
+            </span>
             <span className={deadline.className}>{deadline.text}</span>
             {row.nextScheduledAtMs !== null && <span className="text-muted">Next ad {shortDate.format(row.nextScheduledAtMs)}</span>}
           </div>
@@ -167,8 +173,9 @@ function EventRow({ row, todayMs, duplicate = false }: { row: RequestRow; todayM
         <div className="shrink-0 text-right text-xs text-muted">
           <p>{row.plannedChannelCount} {row.plannedChannelCount === 1 ? "channel" : "channels"} planned</p>
           <p className={row.ownerName ? "mt-1" : "mt-1 font-semibold text-amber-800"}>
-            {row.ownerName ? `Event owner: ${row.ownerName}` : "Event owner unassigned"}
+            Owner: {row.ownerName ?? "Unassigned"}
           </p>
+          <p className="mt-1 max-w-52 truncate">Requester: {row.requesterLabel}</p>
           <p className="mt-2 font-semibold text-sky-700">Open event →</p>
         </div>
       </div>
@@ -615,6 +622,7 @@ export function RequestsTable({ rows, initialFilters = DEFAULT_FILTERS, canEdit 
               <option value="all">All sources</option>
               <option value="pco">Planning Center</option>
               <option value="calendar">Calendar import</option>
+              <option value="request">Request form</option>
               <option value="local">Added here</option>
             </select>
           </label>

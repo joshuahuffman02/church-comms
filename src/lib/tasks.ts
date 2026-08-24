@@ -1,5 +1,7 @@
 import { db } from "./db";
 import { addDays, atMidnight } from "./engine/dates";
+import { productionNeeds, type ProductionNeed } from "./production-needs";
+import { describeRequestProvenance } from "./provenance";
 import { weekRange } from "./week";
 
 /**
@@ -50,6 +52,10 @@ export type MyTask = {
   productionDueAt: Date | null;
   /** True when this deliverable's owner is explicit (vs. inherited from the request). */
   explicitOwner: boolean;
+  sourceLabel: string;
+  requesterLabel: string;
+  ownerLabel: string;
+  productionNeeds: ProductionNeed[];
 };
 
 export type MyTasksResult = {
@@ -166,8 +172,38 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
     },
     include: {
       channel: { select: { name: true, color: true } },
-      request: { select: { id: true, title: true, ownerId: true, eventStart: true } },
-      touches: { select: { scheduledAt: true } },
+      owner: { select: { name: true } },
+      request: {
+        select: {
+          id: true,
+          title: true,
+          ownerId: true,
+          eventStart: true,
+          pcoEventId: true,
+          externalCalendarKey: true,
+          description: true,
+          nextStepText: true,
+          nextStepUrl: true,
+          needsRegistration: true,
+          registrationUrl: true,
+          requesterName: true,
+          requesterEmail: true,
+          requester: { select: { name: true } },
+          owner: { select: { name: true } },
+          assets: {
+            where: { isFinal: true },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
+      touches: {
+        select: {
+          scheduledAt: true,
+          content: true,
+          assetLink: true,
+        },
+      },
     },
     orderBy: { productionDueAt: "asc" },
   });
@@ -191,6 +227,10 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
 
     const bucket = bucketForTask(d, today);
     if (!bucket) continue;
+    const provenance = describeRequestProvenance(
+      d.request,
+      d.owner?.name ?? d.request.owner?.name,
+    );
 
     const task: MyTask = {
       id: d.id,
@@ -202,6 +242,27 @@ export async function myTasks(userId: string, today: Date): Promise<MyTasksResul
       status: d.status,
       productionDueAt: d.productionDueAt,
       explicitOwner: d.ownerId != null,
+      sourceLabel: provenance.sourceLabel,
+      requesterLabel: provenance.requesterLabel,
+      ownerLabel: provenance.ownerLabel,
+      productionNeeds: productionNeeds({
+        requestId: d.request.id,
+        channelName: d.channel.name,
+        pieceStatus: d.status,
+        ownerReady: true,
+        description: d.request.description,
+        nextStepText: d.request.nextStepText,
+        nextStepUrl: d.request.nextStepUrl,
+        needsRegistration: d.request.needsRegistration,
+        registrationUrl: d.request.registrationUrl,
+        hasChannelCopy:
+          Boolean(d.notes?.trim()) ||
+          d.touches.some((touch) => Boolean(touch.content?.trim())),
+        hasCreativeAsset:
+          Boolean(d.assetLink?.trim()) ||
+          d.touches.some((touch) => Boolean(touch.assetLink?.trim())) ||
+          d.request.assets.length > 0,
+      }),
     };
     result[bucket].push(task);
     result.total += 1;

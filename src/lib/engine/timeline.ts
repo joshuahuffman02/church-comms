@@ -21,6 +21,7 @@ export interface ComputeOptions {
 }
 
 const ROLLING_WINDOWED_CHANNEL_KEYS = new Set(["email"]);
+const RECURRING_DATED_CHANNEL_KEYS = new Set(["announcement_video"]);
 
 export function computeDeliverable(
   ch: ChannelConfig, ev: EventInput, today: Date, opts?: ComputeOptions
@@ -55,15 +56,27 @@ export function computeDeliverable(
     const days = windowStart > windowEnd ? [] : weekdaysBetween(windowStart, windowEnd, weekdays);
     touches = days.map(at => ({ scheduledAt: at, purposeLabel: phaseFor(at, event) }));
   } else if (ch.type === "dated_instance") {
-    // Default: last in-window cadence weekday on/before the promotion deadline.
-    // Catch-up: the next available service instance — last cadence weekday in
-    // [max(deadline - offset, today), deadline] that is also >= today.
+    // Announcement Video is a recurring weekly eligibility window: an event may
+    // be considered for every service from the start of promotion through the
+    // promotion deadline. Other dated-instance channels remain one-time and use
+    // the final matching service inside the window.
+    //
+    // Catch-up rebases the start to today, so a late-added event becomes
+    // eligible for every remaining service without manufacturing past work.
     const start = catchUp
       ? maxDate(subDays(scheduleEnd, ch.defaultPublishOffsetDays), todayM)
       : subDays(scheduleEnd, ch.defaultPublishOffsetDays);
-    instanceDate = lastWeekday(start, scheduleEnd, ch.cadence?.weekdays ?? [0]);
-    if (catchUp && instanceDate && instanceDate < todayM) instanceDate = undefined;
-    touches = instanceDate ? [{ scheduledAt: instanceDate, purposeLabel: phaseFor(instanceDate, event) }] : [];
+    const matchingDays = weekdaysBetween(start, scheduleEnd, ch.cadence?.weekdays ?? [0]);
+    if (RECURRING_DATED_CHANNEL_KEYS.has(ch.key)) {
+      touches = matchingDays.map((scheduledAt) => ({
+        scheduledAt,
+        purposeLabel: phaseFor(scheduledAt, event),
+      }));
+      instanceDate = touches[0]?.scheduledAt;
+    } else {
+      instanceDate = matchingDays.at(-1);
+      touches = instanceDate ? [{ scheduledAt: instanceDate, purposeLabel: phaseFor(instanceDate, event) }] : [];
+    }
   } else if (ch.type === "single_weekday") {
     // One post, on the chosen weekday (default Friday) on/before the "offset days
     // before the deadline" mark — so it always lands on that weekday no matter
@@ -113,8 +126,7 @@ export function computeDeliverable(
 
 function lastWeekday(start: Date, end: Date, weekdays: number[]): Date | undefined {
   if (atMidnight(start) > atMidnight(end)) return undefined;
-  const all = weekdaysBetween(start, end, weekdays);
-  return all.length ? all[all.length - 1] : undefined;
+  return weekdaysBetween(start, end, weekdays).at(-1);
 }
 
 export function enforceCapacity(

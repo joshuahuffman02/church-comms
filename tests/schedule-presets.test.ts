@@ -117,6 +117,22 @@ describe("schedule presets", () => {
     expect(ymd(loop?.windowEnd)).toBe("2026-07-26");
   });
 
+  it("keeps multiple preset video dates in one reusable weekly piece", () => {
+    const placements = schedulePresetPlacements(
+      { eventStart: atMidnight(new Date(2026, 6, 15)), tier: 1 },
+      channels,
+      [MONTHLY_FIRST_SUNDAY_FULL_RUN, WEEK_OF_ONLY],
+    );
+    const plan = applySchedulePresetPlacementsToPlan([], placements);
+    const video = plan.filter((deliverable) => deliverable.channelKey === "announcement_video");
+
+    expect(video).toHaveLength(1);
+    expect(video[0].touches.map((touch) => ymd(touch.scheduledAt))).toEqual([
+      "2026-07-05",
+      "2026-07-12",
+    ]);
+  });
+
   it("keeps every week-of placement inside the final seven days", () => {
     const placements = schedulePresetPlacements(
       { eventStart: atMidnight(new Date(2026, 7, 19)), tier: 2 },

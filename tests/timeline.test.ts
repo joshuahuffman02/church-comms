@@ -124,9 +124,9 @@ describe("late detection", () => {
 
 import { computeDeliverable as cd2 } from "../src/lib/engine/timeline";
 
-describe("dated_instance (announcement video)", () => {
+describe("dated_instance (single appearance)", () => {
   const video: ChannelConfig = {
-    key: "announcement_video", name: "Announcement video", type: "dated_instance",
+    key: "stage", name: "Stage announcement", type: "dated_instance",
     defaultPublishOffsetDays: 14, productionLeadDays: 7, lockLeadDays: 7,
     cadence: { weekdays: [0] }, capacity: 3, tierEligibility: [1],
   };
@@ -152,6 +152,29 @@ describe("dated_instance (announcement video)", () => {
     expect(d.instanceDate!.toISOString().slice(0,10)).toBe("2026-06-14");
     expect(d.productionDueAt.toISOString().slice(0,10)).toBe("2026-06-07");
     expect(d.touches.map(t => t.purposeLabel)).toEqual(["register"]);
+  });
+});
+
+describe("announcement video (weekly eligibility)", () => {
+  const video: ChannelConfig = {
+    key: "announcement_video", name: "Announcement video", type: "dated_instance",
+    defaultPublishOffsetDays: 21, productionLeadDays: 7, lockLeadDays: 7,
+    cadence: { weekdays: [0] }, capacity: 3, tierEligibility: [1, 2],
+  };
+
+  it("is eligible every Sunday from the promotion start through the event", () => {
+    const event = atMidnight(new Date("2026-09-13"));
+    const today = atMidnight(new Date("2026-08-01"));
+    const d = computeDeliverable(video, { eventStart: event, tier: 1 }, today);
+
+    expect(d.touches.map((touch) => touch.scheduledAt.toISOString().slice(0, 10))).toEqual([
+      "2026-08-23",
+      "2026-08-30",
+      "2026-09-06",
+      "2026-09-13",
+    ]);
+    expect(d.instanceDate?.toISOString().slice(0, 10)).toBe("2026-08-23");
+    expect(d.productionDueAt.toISOString().slice(0, 10)).toBe("2026-08-16");
   });
 });
 
@@ -250,6 +273,21 @@ describe("catch-up mode (mid-stream import)", () => {
         expect(iso(t.scheduledAt) >= todayIso).toBe(true);
         expect(iso(t.scheduledAt) <= eventIso).toBe(true);
       }
+    });
+
+    it("catchUp keeps every remaining weekly video opportunity", () => {
+      const laterEvent = atMidnight(new Date("2026-06-28"));
+      const d = computeDeliverable(
+        annVideo5,
+        { eventStart: laterEvent, tier: 1 },
+        today,
+        { catchUp: true },
+      );
+      expect(d.touches.map((touch) => iso(touch.scheduledAt))).toEqual([
+        "2026-06-14",
+        "2026-06-21",
+        "2026-06-28",
+      ]);
     });
   });
 
