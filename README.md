@@ -15,7 +15,7 @@ written permission from the maintainer.
 
 ## Related Project
 
-[Church Hub](../Church%20Hub/README.md) is planned as a separate staff operating
+[Church Hub](https://github.com/joshuahuffman02/church-hub/blob/main/README.md) is planned as a separate staff operating
 system for goals, ministry work, communication, formation, and support. Church
 Comms remains the specialized system for communication requests and production.
 The products will connect through Planning Center identity, stable links, signed

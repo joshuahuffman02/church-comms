@@ -1,11 +1,11 @@
 # Church Hub Integration
 
-Church Hub is a separate sibling project at `../Church Hub` relative to this repository.
+Church Hub is a separate sibling project, published at <https://github.com/joshuahuffman02/church-hub> (checked out beside this repository during development).
 
 The canonical integration design is maintained in the Church Hub project:
 
-- [Architecture and integration plan](../../Church%20Hub/docs/ARCHITECTURE_AND_INTEGRATION.md)
-- [Separate-project decision](../../Church%20Hub/docs/decisions/0001-separate-project.md)
+- [Architecture and integration plan](https://github.com/joshuahuffman02/church-hub/blob/main/docs/ARCHITECTURE_AND_INTEGRATION.md)
+- [Separate-project decision](https://github.com/joshuahuffman02/church-hub/blob/main/docs/decisions/0001-separate-project.md)
 
 ## Boundary in this application
 
