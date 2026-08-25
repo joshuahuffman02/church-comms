@@ -20,6 +20,7 @@ export function MobileNav({
   guardrailCount,
   calendarImportCount,
   portalOnly,
+  hubUrl,
 }: {
   sections: MobileNavSection[];
   channels: { key: string; name: string; color: string }[];
@@ -27,6 +28,7 @@ export function MobileNav({
   guardrailCount: number;
   calendarImportCount: number;
   portalOnly: boolean;
+  hubUrl: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const path = usePathname();
@@ -170,6 +172,17 @@ export function MobileNav({
               >
                 <span>⚡</span> Quick post
               </Link>
+            )}
+            {hubUrl && (
+              <a
+                href={hubUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={close}
+                className="mt-3 flex min-h-11 items-center gap-2 rounded-2xl px-3 py-2.5 font-semibold text-muted hover:bg-sky-bg"
+              >
+                <span>⛪</span> Church Hub
+              </a>
             )}
             <form action={logout} className="mt-3 border-t border-slate-100 pt-3">
               <button className="flex min-h-11 w-full items-center gap-2 rounded-2xl px-3 py-2.5 font-semibold text-muted hover:bg-sky-bg">

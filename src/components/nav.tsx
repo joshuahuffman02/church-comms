@@ -120,6 +120,9 @@ export async function Nav() {
   // Badge counts only ACTIONABLE heads-up items (capacity over-limits, mis-tier) —
   // informational "busy week" density signals don't drive the alert count.
   const guardrailCount = guardrails.filter((g) => g.severity !== "info").length;
+  // Sibling Church Hub front door (docs/CHURCH_HUB_INTEGRATION.md step 1).
+  // Hidden entirely when unconfigured so the link never dangles.
+  const hubUrl = process.env.CHURCH_HUB_URL?.trim().replace(/\/$/, "") || null;
 
   const visible = (i: Item) =>
     (!portalOnly || i.portal === true) &&
@@ -198,6 +201,7 @@ export async function Nav() {
         guardrailCount={guardrailCount}
         calendarImportCount={calendarImportCount}
         portalOnly={portalOnly}
+        hubUrl={hubUrl}
       />
 
       {/* Desktop sidebar. grid-cols-1 (a minmax(0,1fr) column) clamps every row
@@ -265,6 +269,18 @@ export async function Nav() {
               </NavLink>
             ))}
           </>
+        )}
+
+        {/* Sibling Church Hub front door (hidden unless CHURCH_HUB_URL is set). */}
+        {hubUrl && (
+          <a
+            href={hubUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="nav-link mt-3 flex w-full items-center gap-2 rounded-2xl px-4 py-2 text-left text-sm font-semibold text-muted"
+          >
+            <span>⛪</span> Church Hub
+          </a>
         )}
 
         <form action={logout} className="mt-3 border-t border-slate-100 pt-3">
