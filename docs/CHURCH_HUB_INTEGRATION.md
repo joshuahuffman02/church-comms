@@ -20,7 +20,7 @@ Church Communications remains authoritative for:
 
 Church Hub will link to this work rather than reimplement it. Planned integration proceeds through:
 
-1. Reciprocal navigation using configured base URLs
+1. Reciprocal navigation using configured base URLs *(implemented: Hub links out via Settings → communicationsUrl; Comms links back via `CHURCH_HUB_URL`)*
 2. Planning Center user and organization identity in both products
 3. A signed handoff into `/submit`
 4. Safe links to `/requests/{id}` and `/my-requests/{id}`
