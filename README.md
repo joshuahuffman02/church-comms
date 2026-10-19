@@ -42,9 +42,9 @@ The screenshots below use the public demo seed data.
 
 ![Events list](docs/screenshots/events.png)
 
-![Pipeline board](docs/screenshots/pipeline.png)
+![Production view](docs/screenshots/production.png)
 
-![Announcement video output preview](docs/screenshots/announcement-video.png)
+![Announcement video lineup](docs/screenshots/announcement-video.png)
 
 ## Stack
 
