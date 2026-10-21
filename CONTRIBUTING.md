@@ -19,10 +19,10 @@ backups, `.env` files, exported calendars, or Planning Center credentials.
 ## License For Contributions
 
 By submitting a pull request or other contribution, you agree that your
-contribution is licensed to the project under the PolyForm Noncommercial License
-1.0.0. Contributions may not add terms that allow commercial resale, paid
-hosting, sublicensing, or selling copies of Church Comms without separate
-written permission from the maintainer.
+contribution is licensed to the project under the GNU Affero General Public
+License version 3 only (`AGPL-3.0-only`). Only submit work you have the right to
+contribute under these terms. Preserve third-party copyright and license notices.
+See [LICENSE](LICENSE) for the complete terms.
 
 ## Workflow
 

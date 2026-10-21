@@ -8,10 +8,11 @@ Center Calendar imports.
 The app does not publish to external tools. It tells a communications team what
 needs to be made, when it is due, and where it should appear.
 
-Church Comms is source-available for noncommercial use under the PolyForm
-Noncommercial License 1.0.0. You may not sell this product, offer it as a paid
-hosted service, or otherwise use it for commercial purposes without separate
-written permission from the maintainer.
+Church Comms is open source under the GNU Affero General Public License
+version 3 only (`AGPL-3.0-only`). Commercial use and paid hosting are permitted
+under the license. If you modify the app and let users interact with it over a
+network, you must offer those users the corresponding source for your modified
+version. See [License](#license).
 
 ## Related Project
 
@@ -226,8 +227,19 @@ Planning Center credentials. Report private security issues using the process in
 
 ## License
 
-PolyForm Noncommercial License 1.0.0. See `LICENSE`.
+Copyright (c) 2026 Josh Huffman.
 
-This is a source-available noncommercial project, not an OSI-approved open
-source project. Commercial use, resale, paid hosting, sublicensing, or selling
-copies of Church Comms requires separate written permission from the maintainer.
+Church Comms is licensed under the GNU Affero General Public License version 3
+only (`AGPL-3.0-only`), an OSI-approved open-source license. See [LICENSE](LICENSE)
+for the complete terms.
+
+You may use, modify, redistribute, and commercially host the software under
+those terms. When distributing covered copies or modifications, preserve the
+required notices and provide corresponding source as the license requires. If
+you run a modified version over a network, prominently offer its corresponding
+source at no charge to users interacting with it. The software comes without
+warranty.
+
+This license applies to this revision and subsequent contributions released
+under it. Earlier releases retain the license included with those releases;
+third-party dependencies retain their own licenses.
