@@ -2,7 +2,7 @@
   "name": "church-comms",
   "version": "1.0.0",
   "description": "Self-hosted church communications planning, intake, scheduling, and output tracking.",
-  "license": "PolyForm-Noncommercial-1.0.0",
+  "license": "AGPL-3.0-only",
   "repository": {
     "type": "git",
     "url": "https://github.com/joshuahuffman02/church-comms.git"
