@@ -14,6 +14,8 @@
 // PCO speaks JSON:API. We type only the slice we consume (no `any`; the parser
 // takes `unknown` and narrows).
 
+import { pcoFetch, pcoResponseError } from "./pco-http";
+
 export const PCO_BASE = "https://api.planningcenteronline.com";
 const EVENT_INSTANCES_URL =
   `${PCO_BASE}/calendar/v2/event_instances` +
@@ -305,7 +307,7 @@ export async function fetchUpcomingPcoEvents(
 
     let res: Response;
     try {
-      res = await fetch(nextUrl, {
+      res = await pcoFetch(nextUrl, {
         headers: {
           Authorization: authHeader(),
           Accept: "application/json",
@@ -318,10 +320,7 @@ export async function fetchUpcomingPcoEvents(
     }
 
     if (!res.ok) {
-      throw new Error(
-        `Planning Center API error (${res.status} ${res.statusText}). ` +
-          `Check your PCO credentials.`,
-      );
+      throw pcoResponseError(res);
     }
 
     const body: unknown = await res.json();
@@ -349,11 +348,11 @@ export async function fetchApprovedUpcomingPcoEvents(
 // --- Per-event enrichment (People API + room resource-requests) -------------
 //
 // These are the extra calls the sync layer makes per approved event. They live
-// here (not in the pure parser) because they hit the network. The PCO rate
-// limit is 100 req/20s; the approved set is ~50 events and the sync caches by
-// id, so a couple of calls each is well within budget. We pause politely
-// between calls and degrade gracefully (return null) on any non-200 — a missing
-// owner or room status should never abort a sync.
+// here (not in the pure parser) because they hit the network. Requests go
+// through `pcoFetch`, which paces them under PCO's rate limit (100 req/20s,
+// shared with any other app on the same credentials) and retries 429s. They
+// degrade gracefully (return null) on any other non-200 — a missing owner or
+// room status should never abort a sync.
 
 const POLITE_PAUSE_MS = 120;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -382,7 +381,7 @@ export async function fetchPcoPerson(personId: string): Promise<PcoPerson> {
     `${PCO_BASE}/people/v2/people/${encodeURIComponent(personId)}?include=emails`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await pcoFetch(url, {
       headers: { Authorization: authHeader(), Accept: "application/json" },
       cache: "no-store",
     });
@@ -459,7 +458,7 @@ export async function fetchEventRoomStatus(
     `/event_resource_requests?per_page=100`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await pcoFetch(url, {
       headers: { Authorization: authHeader(), Accept: "application/json" },
       cache: "no-store",
     });

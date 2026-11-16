@@ -6,11 +6,13 @@ import {
   reduceRoomStatus,
   type PcoEvent,
 } from "../src/lib/pco";
+import { resetPcoHttp } from "../src/lib/pco-http";
 
 const originalPcoToken = process.env.PCO_TOKEN;
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  resetPcoHttp();
   if (originalPcoToken === undefined) {
     delete process.env.PCO_TOKEN;
   } else {
