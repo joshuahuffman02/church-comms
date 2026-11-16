@@ -24,15 +24,13 @@ import {
   type JsonApiResource,
   type JsonApiResponse,
 } from "./pco";
+import { pcoFetch, pcoResponseError } from "./pco-http";
 
-// PCO rate limit is 100 requests / 20s. This is a background sync, so we page
-// politely (a small pause between requests) and cap total pages defensively so
-// a runaway/looping `next` link can't spin forever.
+// PCO rate limit is 100 requests / 20s. Requests go through `pcoFetch`, which
+// paces them and retries 429s. We also cap total pages defensively so a
+// runaway/looping `next` link can't spin forever.
 const PER_PAGE = 100;
 const MAX_PAGES = 50; // 50 * 100 = 5000 rows per resource — far beyond any church
-const POLITE_PAUSE_MS = 250;
-
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** A bookable PCO resource (room or equipment), parsed from `/calendar/v2/resources`. */
 export interface PcoResourceRow {
@@ -160,14 +158,6 @@ export function parsePcoResourceBookings(payload: unknown): PcoBookingRow[] {
 
 // --- network (paginated, polite) --------------------------------------------
 
-/** Throw a clear, consistent error for a non-OK PCO response. */
-function pcoError(res: Response): Error {
-  return new Error(
-    `Planning Center API error (${res.status} ${res.statusText}). ` +
-      `Check your PCO credentials.`,
-  );
-}
-
 /** Read the JSON:API `links.next` URL from a page body, or null when last page. */
 function nextLink(body: unknown): string | null {
   const links = asObject(asObject(body)?.links);
@@ -176,9 +166,11 @@ function nextLink(body: unknown): string | null {
 
 /**
  * Fetch + parse every page of a PCO collection, following `links.next`.
- * `signals429` lets the caller stop gracefully on a rate-limit (returns what we
- * have so far instead of throwing) — this is a background sync, so we don't
- * hammer. `parse` maps each page body to rows that are concatenated in order.
+ * `parse` maps each page body to rows that are concatenated in order.
+ *
+ * A rate limit that outlasts `pcoFetch`'s retries THROWS rather than returning
+ * a partial list: the rooms sync replaces each room's bookings with what this
+ * returns, so a silently truncated list would delete real bookings.
  */
 async function fetchAllPages<T>(
   firstUrl: string,
@@ -189,20 +181,17 @@ async function fetchAllPages<T>(
   let page = 0;
 
   while (url && page < MAX_PAGES) {
-    const res: Response = await fetch(url, {
+    const res: Response = await pcoFetch(url, {
       headers: { Authorization: authHeader(), Accept: "application/json" },
       cache: "no-store",
     });
-    // 429: stop gracefully with what we have — don't keep pushing the limit.
-    if (res.status === 429) break;
-    if (!res.ok) throw pcoError(res);
+    if (!res.ok) throw pcoResponseError(res);
 
     const body: unknown = await res.json();
     out.push(...parse(body));
 
     url = nextLink(body);
     page++;
-    if (url) await sleep(POLITE_PAUSE_MS);
   }
   return out;
 }
